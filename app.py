@@ -7,13 +7,16 @@ from scipy import stats
 import io
 
 # ---------------------------------------------------------------------------
-# 1. Data loading functions (adapted for uploaded files)
+# 1. Data loading & models (same as before)
 # ---------------------------------------------------------------------------
 
 REGIMES = {
-    1: {"label": "European sovereign debt crisis", "start": "2010-01", "end": "2012-12", "n_obs": 36},
-    2: {"label": "Post-crisis recovery / QE era",   "start": "2013-01", "end": "2019-12", "n_obs": 84},
-    3: {"label": "COVID shock / post-pandemic inflation", "start": "2020-01", "end": "2024-12", "n_obs": 60},
+    1: {"label": "European sovereign debt crisis", "start": "2010-01", "end": "2012-12", "n_obs": 36,
+        "desc": "Sovereign debt tensions in peripheral Eurozone countries; high volatility."},
+    2: {"label": "Post-crisis recovery / QE era", "start": "2013-01", "end": "2019-12", "n_obs": 84,
+        "desc": "Gradual economic recovery, ECB quantitative easing, low inflation."},
+    3: {"label": "COVID shock / post-pandemic inflation", "start": "2020-01", "end": "2024-12", "n_obs": 60,
+        "desc": "Pandemic-induced market crash, rapid recovery, then high inflation and rate hikes."},
 }
 
 FULL_SAMPLE_START = "2010-01"
@@ -220,33 +223,6 @@ def run_block(portfolio_returns, factors_df, model_name):
         "k_factors": len(factor_cols),
     }
 
-def run_adf(series, regression="c", autolag="AIC"):
-    s = series.dropna()
-    stat, pvalue, usedlag, nobs, crit_values, icbest = adfuller(
-        s, regression=regression, autolag=autolag
-    )
-    return {
-        "adf_stat": stat,
-        "p_value": pvalue,
-        "used_lag": usedlag,
-        "n_obs": nobs,
-        "crit_1%": crit_values["1%"],
-        "crit_5%": crit_values["5%"],
-        "crit_10%": crit_values["10%"],
-    }
-
-def adf_table(factors_df, factor_cols):
-    rows = []
-    for col in factor_cols:
-        if col not in factors_df.columns:
-            continue
-        r = run_adf(factors_df[col])
-        r["factor"] = col
-        rows.append(r)
-    out = pd.DataFrame(rows).set_index("factor")
-    out = out[["adf_stat", "p_value", "used_lag", "n_obs", "crit_1%", "crit_5%", "crit_10%"]]
-    return out
-
 def grs_test(alphas, resid_mat, factors_df, factor_cols):
     aligned = pd.concat([resid_mat, factors_df[factor_cols]], axis=1).dropna()
     resid_aligned = aligned[resid_mat.columns]
@@ -276,9 +252,13 @@ def grs_test(alphas, resid_mat, factors_df, factor_cols):
 # 3. Streamlit UI
 # ---------------------------------------------------------------------------
 
-st.set_page_config(page_title="CAPM/FF3/FF5 Regime Comparison", layout="wide")
-st.title("📈 CAPM / FF3 / FF5 Regime‑Comparison Pipeline")
-st.markdown("Upload the required data files and click **Run Analysis**.")
+st.set_page_config(page_title="CAPM/FF3/FF5 Interactive Comparison", layout="wide")
+st.title("📈 CAPM / FF3 / FF5 – Interactive Regime & Stock Selection")
+
+st.markdown("""
+Upload the 7 required CSV files, then **choose which regimes and portfolios** you want to analyze.
+The app will show you how CAPM, FF3, and FF5 perform for your selections.
+""")
 
 required_files = {
     "ff3": "Europe_3_Factors.csv",
@@ -297,8 +277,8 @@ for i, (key, fname) in enumerate(required_files.items()):
     uploaded[key] = col.file_uploader(f"📄 {fname}", type="csv", key=key)
 
 if all(uploaded.values()):
-    if st.button("🚀 Run Analysis", type="primary"):
-        with st.spinner("Running analysis..."):
+    if st.button("🚀 Load & Process Data", type="primary"):
+        with st.spinner("Loading and processing data..."):
             try:
                 files = {k: v.getvalue() for k, v in uploaded.items()}
                 panel = build_master_panel(files)
@@ -309,154 +289,119 @@ if all(uploaded.values()):
                 excess_inv_regimes = split_by_regime(panel["excess_returns"]["inv"])
                 excess_by_asset = {"beme": excess_beme_regimes, "op": excess_op_regimes, "inv": excess_inv_regimes}
                 factors_by_model = {"CAPM": ff3_regimes, "FF3": ff3_regimes, "FF5": ff5_regimes}
-                ALL_FACTOR_COLS = ["Mkt-RF", "SMB", "HML", "RMW", "CMA"]
-                MODEL_ASSET_SETS = {"CAPM": ["beme"], "FF3": ["beme"], "FF5": ["beme", "op", "inv"]}
-                ASSET_SET_LABELS = {
-                    "beme": "ME / BE-ME (size & book-to-market)",
-                    "op": "ME / OP (size & operating profitability)",
-                    "inv": "ME / INV (size & investment)",
-                }
 
-                # Validation
-                st.subheader("✅ Validation checks")
-                for rid, spec in REGIMES.items():
-                    n = len(ff3_regimes[rid])
-                    status = "✅" if n == spec["n_obs"] else "❌"
-                    st.write(f"Regime {rid} ({spec['label']}): {n} obs (expected {spec['n_obs']}) {status}")
-                st.write(f"Missing RF months: {panel['missing_rf_months']}")
-
-                # ADF
-                st.subheader("📊 ADF Stationarity Tests")
-                adf_rows = []
-                for rid in REGIMES:
-                    tbl = adf_table(ff5_regimes[rid], ALL_FACTOR_COLS)
-                    tbl.insert(0, "regime", rid)
-                    tbl.insert(1, "regime_label", REGIMES[rid]["label"])
-                    adf_rows.append(tbl)
-                adf_full = pd.concat(adf_rows)
-                st.dataframe(adf_full[["regime", "p_value"]])
-                cma_r1 = adf_full.loc[(adf_full["regime"] == 1) & (adf_full.index == "CMA"), "p_value"]
-                rmw_r3 = adf_full.loc[(adf_full["regime"] == 3) & (adf_full.index == "RMW"), "p_value"]
-                if len(cma_r1):
-                    st.write(f"CMA Regime 1 p-value: {cma_r1.values[0]:.3f} (expected ~0.193, unit-root not rejected)")
-                if len(rmw_r3):
-                    st.write(f"RMW Regime 3 p-value: {rmw_r3.values[0]:.3f} (expected ~0.064, not rejected @5%, rejected @10%)")
-
-                # Descriptive stats
-                st.subheader("📈 Descriptive Statistics")
-                desc_rows = []
-                for rid in REGIMES:
-                    df = ff5_regimes[rid][ALL_FACTOR_COLS]
-                    mean = df.mean()
-                    std = df.std()
-                    sharpe = mean / std
-                    for col in ALL_FACTOR_COLS:
-                        desc_rows.append({
-                            "regime": rid,
-                            "regime_label": REGIMES[rid]["label"],
-                            "factor": col,
-                            "mean_monthly_pct": mean[col],
-                            "std_monthly_pct": std[col],
-                            "sharpe_ratio": sharpe[col],
-                        })
-                desc_df = pd.DataFrame(desc_rows)
-                st.dataframe(desc_df)
-
-                # Run regression blocks
-                st.subheader("📉 Regression Results")
-                block_summary_rows = []
-                per_portfolio_alpha_rows = []
+                # Run all regressions once and store results in session state
+                all_results = []
                 for model_name in ["CAPM", "FF3", "FF5"]:
-                    for asset_set in MODEL_ASSET_SETS[model_name]:
-                        for rid in REGIMES:
-                            factors_df = factors_by_model[model_name][rid]
-                            port_ret = excess_by_asset[asset_set][rid]
-                            block = run_block(port_ret, factors_df, model_name)
-                            grs = grs_test(block["alphas"], block["resid_mat"], factors_df, MODEL_FACTORS[model_name])
-                            avg_adj_r2 = block["adj_r2"].mean()
-                            avg_abs_alpha = block["alphas"].abs().mean()
-                            block_summary_rows.append({
+                    for rid in REGIMES:
+                        factors_df = factors_by_model[model_name][rid]
+                        port_ret = excess_by_asset["beme"][rid]   # use BE/ME portfolios for main selection
+                        block = run_block(port_ret, factors_df, model_name)
+                        grs = grs_test(block["alphas"], block["resid_mat"], factors_df, MODEL_FACTORS[model_name])
+                        for pf in block["alphas"].index:
+                            all_results.append({
                                 "model": model_name,
                                 "regime": rid,
                                 "regime_label": REGIMES[rid]["label"],
-                                "test_assets": ASSET_SET_LABELS[asset_set],
+                                "portfolio": pf,
+                                "alpha": block["alphas"][pf],
+                                "adj_r2": block["adj_r2"][pf],
+                                "grs_f": grs["GRS_F"],
+                                "grs_p": grs["p_value"],
                                 "n_obs": block["n_obs"],
-                                "n_portfolios": len(port_ret.columns),
                                 "k_factors": block["k_factors"],
-                                "newey_west_lag": block["lag"],
-                                "avg_adj_r2": avg_adj_r2,
-                                "avg_abs_alpha_pct": avg_abs_alpha,
-                                "GRS_F": grs["GRS_F"],
-                                "GRS_df1": grs["df1"],
-                                "GRS_df2": grs["df2"],
-                                "GRS_p_value": grs["p_value"],
                             })
-                            for pf_name in block["alphas"].index:
-                                per_portfolio_alpha_rows.append({
-                                    "model": model_name,
-                                    "regime": rid,
-                                    "test_assets": asset_set,
-                                    "portfolio": pf_name,
-                                    "alpha_pct": block["alphas"][pf_name],
-                                    "adj_r2": block["adj_r2"][pf_name],
-                                })
-                block_summary = pd.DataFrame(block_summary_rows)
-
-                # Primary 3x3 matrix
-                primary = block_summary[block_summary["test_assets"] == ASSET_SET_LABELS["beme"]]
-                matrix_rows = []
-                for model_name in ["CAPM", "FF3", "FF5"]:
-                    for rid in REGIMES:
-                        row = primary[(primary["model"] == model_name) & (primary["regime"] == rid)].iloc[0]
-                        matrix_rows.append({
-                            "model": model_name,
-                            "regime": rid,
-                            "regime_label": REGIMES[rid]["label"],
-                            "adj_r2": row["avg_adj_r2"],
-                            "avg_abs_alpha_pct": row["avg_abs_alpha_pct"],
-                            "GRS_F": row["GRS_F"],
-                            "GRS_p_value": row["GRS_p_value"],
-                        })
-                results_matrix = pd.DataFrame(matrix_rows)
-                st.write("### Primary Results (BE-ME portfolios)")
-                st.dataframe(results_matrix)
-
-                # Pivoted tables
-                st.write("### Pivoted tables")
-                pivot_adj_r2 = results_matrix.pivot(index="model", columns="regime_label", values="adj_r2")
-                pivot_alpha = results_matrix.pivot(index="model", columns="regime_label", values="avg_abs_alpha_pct")
-                pivot_grs_f = results_matrix.pivot(index="model", columns="regime_label", values="GRS_F")
-                pivot_grs_p = results_matrix.pivot(index="model", columns="regime_label", values="GRS_p_value")
-                st.write("**Adj. R²**")
-                st.dataframe(pivot_adj_r2)
-                st.write("**Avg |α|**")
-                st.dataframe(pivot_alpha)
-                st.write("**GRS F-statistic**")
-                st.dataframe(pivot_grs_f)
-                st.write("**GRS p-value**")
-                st.dataframe(pivot_grs_p)
-
-                # Download buttons
-                st.subheader("📥 Download Results")
-                csv_data = {
-                    "results_matrix_3x3_beme.csv": results_matrix,
-                    "matrix_adj_r2.csv": pivot_adj_r2,
-                    "matrix_avg_abs_alpha.csv": pivot_alpha,
-                    "matrix_grs_f.csv": pivot_grs_f,
-                    "matrix_grs_pvalue.csv": pivot_grs_p,
-                    "block_summary_all.csv": block_summary,
-                    "adf_test_results.csv": adf_full,
-                    "descriptive_statistics.csv": desc_df,
-                    "per_portfolio_alphas.csv": pd.DataFrame(per_portfolio_alpha_rows),
-                    "rf_crosscheck_french_vs_euro.csv": panel["rf_check"],
-                }
-                for fname, df in csv_data.items():
-                    csv = df.to_csv(index=True)
-                    st.download_button(f"⬇️ Download {fname}", data=csv, file_name=fname, mime="text/csv")
+                st.session_state["results"] = pd.DataFrame(all_results)
+                st.success("✅ Data processed! Now choose your selections below.")
 
             except Exception as e:
-                st.error(f"An error occurred: {e}")
+                st.error(f"Error: {e}")
                 st.exception(e)
 
+# ---------------------------------------------------------------------------
+# Interactive selection (only if results exist)
+# ---------------------------------------------------------------------------
+
+if "results" in st.session_state and st.session_state["results"] is not None:
+    df = st.session_state["results"]
+
+    st.header("🎯 Select your analysis parameters")
+
+    # Regime selection
+    regime_labels = df["regime_label"].unique().tolist()
+    selected_regimes = st.multiselect(
+        "Choose macroeconomic regime(s)",
+        options=regime_labels,
+        default=regime_labels,  # select all by default
+    )
+
+    # Portfolio selection
+    portfolio_names = sorted(df["portfolio"].unique().tolist())
+    select_all = st.checkbox("Select all portfolios", value=True)
+    if select_all:
+        selected_portfolios = portfolio_names
+    else:
+        selected_portfolios = st.multiselect(
+            "Choose portfolios (see legend below)",
+            options=portfolio_names,
+            default=portfolio_names[:5],  # a few defaults
+        )
+
+    if selected_regimes and selected_portfolios:
+        filtered = df[
+            (df["regime_label"].isin(selected_regimes)) &
+            (df["portfolio"].isin(selected_portfolios))
+        ]
+
+        if filtered.empty:
+            st.warning("No data for these selections. Please adjust your choices.")
+        else:
+            # Show summary table
+            st.subheader("📊 Model Comparison for Selected Stocks & Regimes")
+            # Group by model and regime, compute averages
+            summary = filtered.groupby(["model", "regime_label"]).agg({
+                "adj_r2": "mean",
+                "alpha": lambda x: x.abs().mean(),
+                "grs_f": "first",
+                "grs_p": "first",
+                "n_obs": "first",
+                "k_factors": "first",
+            }).reset_index()
+            summary["avg_abs_alpha"] = summary["alpha"]
+            summary = summary.rename(columns={
+                "adj_r2": "Avg Adj R²",
+                "avg_abs_alpha": "Avg |α|",
+                "grs_f": "GRS F",
+                "grs_p": "GRS p-value",
+            })
+            summary = summary[["model", "regime_label", "Avg Adj R²", "Avg |α|", "GRS F", "GRS p-value"]]
+            st.dataframe(summary.style.format({
+                "Avg Adj R²": "{:.4f}",
+                "Avg |α|": "{:.4f}",
+                "GRS F": "{:.4f}",
+                "GRS p-value": "{:.4f}",
+            }))
+
+            # Bar chart comparing models
+            st.subheader("📊 Model Comparison (Bar Chart)")
+            chart_data = summary.pivot(index="regime_label", columns="model", values="Avg Adj R²")
+            st.bar_chart(chart_data)
+
+            # Also show a chart for Avg |α| (lower is better)
+            st.subheader("📊 Average Absolute Alpha (lower is better)")
+            alpha_chart = summary.pivot(index="regime_label", columns="model", values="Avg |α|")
+            st.bar_chart(alpha_chart)
+
+            # Show selected portfolios legend
+            with st.expander("📋 Selected portfolios"):
+                st.write(selected_portfolios)
+
+            # Download filtered data
+            csv = filtered.to_csv(index=False)
+            st.download_button("⬇️ Download selected results (CSV)", data=csv, file_name="selected_analysis.csv", mime="text/csv")
+
+    else:
+        st.info("Select at least one regime and one portfolio to see results.")
+
 else:
-    st.info("Please upload all 7 required CSV files to enable the analysis.")
+    st.info("Please upload the data files and click 'Load & Process Data' first.")
