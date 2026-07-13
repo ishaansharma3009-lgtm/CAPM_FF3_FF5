@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STYLING (unchanged – keeps the dark, professional look)
+# STYLING (unchanged – same dark theme)
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
@@ -282,8 +282,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# EMBEDDED DATA – Europe_3_Factors.csv (full content – same as before)
+# EMBEDDED DATA – Europe_3_Factors.csv and Europe_5_Factors.csv
+# (Full content – unchanged from previous version)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 EUROPE_3_FACTORS_CSV = """This file was created using the 202605 Bloomberg database.
 
 Missing data are indicated by -99.99.
@@ -764,9 +766,6 @@ Missing data are indicated by -99.99.
 2025   ,30.55   ,-8.63   ,29.57    ,4.25
 """
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# EMBEDDED DATA – Europe_5_Factors.csv (full content – same as before)
-# ═══════════════════════════════════════════════════════════════════════════════
 EUROPE_5_FACTORS_CSV = """This file was created using the 202605 Bloomberg database.
 
 Missing data are indicated by -99.99.
@@ -1248,7 +1247,7 @@ Missing data are indicated by -99.99.
 """
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# DATA LOADER – parses embedded strings, strips spaces from index
+# DATA LOADER – parses embedded strings, keeps only rows with 6-digit numeric index
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_data
@@ -1257,8 +1256,8 @@ def load_factor_data_from_strings():
         ff3 = pd.read_csv(StringIO(EUROPE_3_FACTORS_CSV), skiprows=6, index_col=0)
         ff5 = pd.read_csv(StringIO(EUROPE_5_FACTORS_CSV), skiprows=6, index_col=0)
         for df in [ff3, ff5]:
-            # Strip whitespace from index before parsing dates
-            df.index = df.index.str.strip()
+            # Keep only rows where index is a 6-digit number (YYYYMM) – this filters out the annual section and blank lines
+            df = df[df.index.str.match(r'^\d{6}$')]
             df.index = pd.to_datetime(df.index, format='%Y%m')
             df.replace(-99.99, np.nan, inplace=True)
             df = df / 100
@@ -1370,7 +1369,7 @@ def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
     }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR – Clean, no disclaimers
+# SIDEBAR – clean, no disclaimers
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
@@ -1408,7 +1407,7 @@ try:
         st.error("No data available for selected period.")
         st.stop()
     
-    # Use the market factor (Mkt-RF) as the return series
+    # Use the market factor as the return series
     returns = ff3_period['Mkt-RF']
     returns_display = "European Market (Mkt-RF)"
     
