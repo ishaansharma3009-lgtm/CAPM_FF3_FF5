@@ -4,6 +4,7 @@ import numpy as np
 import warnings
 from datetime import datetime
 from scipy import stats
+import os
 
 # Conditional import for yfinance
 try:
@@ -23,7 +24,7 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STYLING (same as before – omitted for brevity, include the full CSS block)
+# STYLING (same as before – included for completeness)
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
@@ -289,36 +290,71 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LOAD DATA
+# LOAD DATA with fallback to file upload
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def get_file_path(filename):
+    """Return the absolute path to a file in the same directory as this script."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(script_dir, filename)
+
 @st.cache_data
-def load_factor_data():
+def load_factor_data(uploaded_ff3=None, uploaded_ff5=None):
+    """Load factor data from files or uploaded content."""
     try:
-        ff3 = pd.read_csv('Europe_3_Factors.csv', skiprows=6, index_col=0)
-        ff5 = pd.read_csv('Europe_5_Factors.csv', skiprows=6, index_col=0)
+        if uploaded_ff3 is not None and uploaded_ff5 is not None:
+            # Use uploaded files
+            ff3 = pd.read_csv(uploaded_ff3, skiprows=6, index_col=0)
+            ff5 = pd.read_csv(uploaded_ff5, skiprows=6, index_col=0)
+        else:
+            # Try to load from disk
+            ff3_path = get_file_path('Europe_3_Factors.csv')
+            ff5_path = get_file_path('Europe_5_Factors.csv')
+            ff3 = pd.read_csv(ff3_path, skiprows=6, index_col=0)
+            ff5 = pd.read_csv(ff5_path, skiprows=6, index_col=0)
+        
         for df in [ff3, ff5]:
             df.index = pd.to_datetime(df.index.astype(str), format='%Y%m')
             df.replace(-99.99, np.nan, inplace=True)
             df = df / 100
         return ff3, ff5
-    except FileNotFoundError as e:
-        st.error(f"❌ Missing data file: {e.filename}\n\nPlease ensure all CSV files are in the same directory.")
+    except FileNotFoundError:
         return None, None
     except Exception as e:
-        st.error(f"Error loading factor data: {e}")
+        st.error(f"Error reading data: {e}")
         return None, None
 
-@st.cache_data
-def load_portfolio_data():
-    try:
-        df = pd.read_csv('Europe_25_Portfolios_ME_BE-ME.csv', skiprows=9)
-        return df
-    except:
-        return None
-
+# Try loading data initially
 ff3, ff5 = load_factor_data()
-port_data = load_portfolio_data()
+
+# If missing, present file uploader in main area
+if ff3 is None or ff5 is None:
+    st.warning("⚠️ Factor data files not found in the app directory.")
+    st.info("Please upload the required CSV files below to continue.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        uploaded_ff3 = st.file_uploader("Upload Europe_3_Factors.csv", type=['csv'])
+    with col2:
+        uploaded_ff5 = st.file_uploader("Upload Europe_5_Factors.csv", type=['csv'])
+    
+    if uploaded_ff3 is not None and uploaded_ff5 is not None:
+        with st.spinner("Loading data..."):
+            ff3, ff5 = load_factor_data(uploaded_ff3, uploaded_ff5)
+            if ff3 is not None and ff5 is not None:
+                st.success("✅ Data loaded successfully! You can now use the app.")
+                st.rerun()
+            else:
+                st.error("Failed to load data. Please check file format.")
+    else:
+        st.stop()
+else:
+    # Portfolio data is optional
+    try:
+        port_path = get_file_path('Europe_25_Portfolios_ME_BE-ME.csv')
+        port_data = pd.read_csv(port_path, skiprows=9)
+    except:
+        port_data = None
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MACRO PERIODS
@@ -335,7 +371,7 @@ MACRO_PERIODS = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# REGRESSION FUNCTIONS (unchanged)
+# REGRESSION FUNCTIONS (same as before)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def run_capm(returns, risk_free, market_premium):
@@ -424,11 +460,9 @@ def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
 with st.sidebar:
     st.markdown("### 📊 Configuration")
     
-    # If yfinance is not available, force European Portfolios and show a message
     if not YFINANCE_AVAILABLE:
         st.warning("⚠️ `yfinance` not installed. Individual stock download is disabled. Using European Portfolios only.")
         asset_type = "European Portfolios"
-        # Override the radio button to disabled look (we'll just show info)
         st.markdown("**Asset Type**")
         st.info("European Portfolios (only option available)")
         selected_portfolio = st.selectbox("Select Portfolio", 
@@ -475,10 +509,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MAIN EXECUTION
+# MAIN EXECUTION (only if data loaded)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if ff3 is None or ff5 is None:
+    # This should not happen if we stopped earlier, but just in case
+    st.error("Data not loaded. Please upload the required CSV files.")
     st.stop()
 
 try:
