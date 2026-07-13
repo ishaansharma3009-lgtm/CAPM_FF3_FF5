@@ -3,8 +3,6 @@ import pandas as pd
 import numpy as np
 import warnings
 from datetime import datetime
-from pathlib import Path
-import plotly.graph_objects as go
 from scipy import stats
 import yfinance as yf
 
@@ -291,15 +289,13 @@ st.markdown("""
 def load_factor_data():
     """Load Fama-French factor data from CSV files in the same directory."""
     try:
-        # Use relative paths – files must be in the same folder as this script
         ff3 = pd.read_csv('Europe_3_Factors.csv', skiprows=6, index_col=0)
         ff5 = pd.read_csv('Europe_5_Factors.csv', skiprows=6, index_col=0)
         
-        # Clean data
         for df in [ff3, ff5]:
             df.index = pd.to_datetime(df.index.astype(str), format='%Y%m')
             df.replace(-99.99, np.nan, inplace=True)
-            df = df / 100  # Convert to decimal
+            df = df / 100
         
         return ff3, ff5
     except FileNotFoundError as e:
@@ -317,12 +313,10 @@ def load_factor_data():
 
 @st.cache_data
 def load_portfolio_data():
-    """Load European portfolios from CSV."""
     try:
         df = pd.read_csv('Europe_25_Portfolios_ME_BE-ME.csv', skiprows=9)
         return df
     except FileNotFoundError:
-        # Portfolio file is optional; we can still run with individual stocks
         return None
     except Exception as e:
         st.warning(f"Could not load portfolio data: {e}")
@@ -350,13 +344,11 @@ MACRO_PERIODS = {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def run_capm(returns, risk_free, market_premium):
-    """CAPM: E(R) = Rf + β(Rm - Rf)"""
     if len(returns) < 12:
         return None
     
     y = returns.values - risk_free.values
     X = market_premium.values.reshape(-1, 1)
-    
     X_with_const = np.column_stack([np.ones(len(X)), X])
     beta = np.linalg.lstsq(X_with_const, y, rcond=None)[0]
     
@@ -387,7 +379,6 @@ def run_capm(returns, risk_free, market_premium):
     }
 
 def run_ff3(returns, risk_free, market_premium, smb, hml):
-    """Fama-French 3-factor: E(R) = α + β₁MKT + β₂SMB + β₃HML"""
     common = returns.index.intersection(market_premium.index).intersection(smb.index).intersection(hml.index)
     if len(common) < 12:
         return None
@@ -426,7 +417,6 @@ def run_ff3(returns, risk_free, market_premium, smb, hml):
     }
 
 def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
-    """Fama-French 5-factor"""
     common = returns.index.intersection(market_premium.index).intersection(smb.index)\
                    .intersection(hml.index).intersection(rmw.index).intersection(cma.index)
     if len(common) < 12:
@@ -520,7 +510,7 @@ st.markdown("""
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if ff3 is None or ff5 is None:
-    st.stop()  # Error already displayed
+    st.stop()
 
 try:
     ff3_period = ff3[(ff3.index >= period_start) & (ff3.index <= period_end)].copy()
@@ -530,10 +520,8 @@ try:
         st.error("No data available for selected period.")
         st.stop()
     
-    # Prepare return data
     if asset_type == "European Portfolios":
-        # Use FF factor data as proxy returns
-        returns = ff3_period[['Mkt-RF']] * 0.5  # Simplified
+        returns = ff3_period[['Mkt-RF']] * 0.5
         returns_display = f"**{selected_portfolio}** (Proxy)"
     else:
         returns_dict = {}
