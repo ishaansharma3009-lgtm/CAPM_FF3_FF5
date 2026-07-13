@@ -4,16 +4,7 @@ import numpy as np
 import warnings
 from datetime import datetime
 from scipy import stats
-import os
 from io import StringIO
-
-# Conditional import for yfinance
-try:
-    import yfinance as yf
-    YFINANCE_AVAILABLE = True
-except ImportError:
-    yf = None
-    YFINANCE_AVAILABLE = False
 
 warnings.filterwarnings('ignore')
 
@@ -25,7 +16,273 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# EMBEDDED DATA – Europe_3_Factors.csv (full content)
+# STYLING (unchanged – keeps the dark, professional look)
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+    :root {
+        --bg:        #08090d;
+        --surface:   #0f1117;
+        --surface2:  #161820;
+        --border:    #1e2030;
+        --border2:   #2a2d42;
+        --accent:    #4fffb0;
+        --accent2:   #00c9ff;
+        --warn:      #ff6b6b;
+        --success:   #4fffb0;
+        --muted:     #4a4f6a;
+        --text:      #e8eaf0;
+        --text2:     #8b90ab;
+        --font-head: 'Space Grotesk', 'Trebuchet MS', sans-serif;
+        --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+    }
+
+    html, body, [data-testid="stAppViewContainer"],
+    [data-testid="stMain"], .main { background: var(--bg) !important; }
+
+    * { font-family: var(--font-mono) !important; }
+
+    [data-testid="stHeader"],
+    #stDecoration,
+    [data-testid="stToolbar"] { display: none !important; }
+
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-left: 2.5rem !important;
+        padding-right: 2.5rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 1600px !important;
+    }
+
+    [data-testid="stSidebar"] {
+        min-width: 300px !important;
+        width: 300px !important;
+        background: var(--surface) !important;
+        border-right: 1px solid var(--border) !important;
+    }
+
+    [data-testid="stSidebarCollapseButton"] { display: none !important; }
+
+    [data-testid="stSidebar"] * { color: var(--text) !important; }
+    
+    [data-testid="stSidebar"] .stSelectbox select,
+    [data-testid="stSidebar"] .stMultiSelect select,
+    [data-testid="stSidebar"] .stTextInput input,
+    [data-testid="stSidebar"] .stDateInput input {
+        background: var(--surface2) !important;
+        border: 1px solid var(--border2) !important;
+        color: var(--text) !important;
+        border-radius: 4px !important;
+    }
+
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stMarkdown p {
+        color: var(--text2) !important;
+        font-size: 0.7rem !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+    }
+
+    [data-testid="stSidebar"] h3 {
+        font-family: var(--font-head) !important;
+        color: var(--accent) !important;
+        font-size: 0.65rem !important;
+        letter-spacing: 0.2em !important;
+        text-transform: uppercase !important;
+        margin-top: 1.2rem !important;
+    }
+
+    [data-testid="stSidebar"] hr {
+        border-color: var(--border) !important;
+        margin: 0.8rem 0 !important;
+    }
+
+    .header-block {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        margin-bottom: 2rem;
+        padding-bottom: 1.4rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+        font-family: 'Space Grotesk', 'Trebuchet MS', Arial, sans-serif !important;
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.02em;
+    }
+
+    .logo span { color: var(--accent); }
+
+    .subtitle {
+        font-family: 'Space Grotesk', 'Trebuchet MS', Arial, sans-serif !important;
+        font-size: 0.85rem;
+        color: var(--text2);
+        letter-spacing: 0.05em;
+    }
+
+    .badge {
+        margin-left: auto;
+        background: rgba(79,255,176,0.07);
+        border: 1px solid rgba(79,255,176,0.25);
+        color: var(--accent);
+        font-size: 0.6rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 0.25rem 0.6rem;
+        border-radius: 3px;
+        white-space: nowrap;
+    }
+
+    .sec-label {
+        font-family: var(--font-head);
+        font-size: 0.6rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 1.8rem 0 0.8rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .sec-label::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+    }
+
+    .sec-label .dot {
+        width: 4px; height: 4px;
+        border-radius: 50%;
+        background: var(--accent);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+
+    .stat-cell {
+        background: var(--surface);
+        padding: 1rem 1.2rem;
+        position: relative;
+    }
+
+    .stat-cell:hover { background: var(--surface2); }
+
+    .stat-label {
+        font-size: 0.6rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text2);
+        margin-bottom: 0.35rem;
+    }
+
+    .stat-value {
+        font-family: var(--font-head);
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--accent);
+        line-height: 1;
+    }
+
+    .stat-sub {
+        font-size: 0.55rem;
+        color: var(--muted);
+        margin-top: 0.25rem;
+    }
+
+    .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 1.2rem;
+        margin-bottom: 1rem;
+    }
+
+    .panel-title {
+        font-size: 0.6rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--text2);
+        margin-bottom: 0.8rem;
+        padding-bottom: 0.6rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .rank-badge {
+        display: inline-block;
+        padding: 0.15rem 0.4rem;
+        border-radius: 3px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+    }
+
+    .rank-1 { background: rgba(79,255,176,0.15); color: var(--accent); }
+    .rank-2 { background: rgba(0,201,255,0.15); color: var(--accent2); }
+    .rank-3 { background: rgba(255,107,107,0.15); color: var(--warn); }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+
+    table thead {
+        background: var(--surface2);
+        border-bottom: 2px solid var(--border2);
+    }
+
+    table th {
+        padding: 0.7rem;
+        text-align: left;
+        color: var(--text2);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+    }
+
+    table td {
+        padding: 0.6rem 0.7rem;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+    }
+
+    table tbody tr:hover { background: rgba(79,255,176,0.03); }
+
+    .metric-highlight {
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    .metric-warn {
+        color: var(--warn);
+        font-weight: 600;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+</style>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EMBEDDED DATA – Europe_3_Factors.csv (full content – same as before)
 # ═══════════════════════════════════════════════════════════════════════════════
 EUROPE_3_FACTORS_CSV = """This file was created using the 202605 Bloomberg database.
 
@@ -508,7 +765,7 @@ Missing data are indicated by -99.99.
 """
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# EMBEDDED DATA – Europe_5_Factors.csv (full content)
+# EMBEDDED DATA – Europe_5_Factors.csv (full content – same as before)
 # ═══════════════════════════════════════════════════════════════════════════════
 EUROPE_5_FACTORS_CSV = """This file was created using the 202605 Bloomberg database.
 
@@ -991,17 +1248,18 @@ Missing data are indicated by -99.99.
 """
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# DATA LOADER – now using embedded strings
+# DATA LOADER – parses embedded strings, strips spaces from index
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_data
 def load_factor_data_from_strings():
-    """Parse embedded CSV strings into DataFrames."""
     try:
         ff3 = pd.read_csv(StringIO(EUROPE_3_FACTORS_CSV), skiprows=6, index_col=0)
         ff5 = pd.read_csv(StringIO(EUROPE_5_FACTORS_CSV), skiprows=6, index_col=0)
         for df in [ff3, ff5]:
-            df.index = pd.to_datetime(df.index.astype(str), format='%Y%m')
+            # Strip whitespace from index before parsing dates
+            df.index = df.index.str.strip()
+            df.index = pd.to_datetime(df.index, format='%Y%m')
             df.replace(-99.99, np.nan, inplace=True)
             df = df / 100
         return ff3, ff5
@@ -1009,17 +1267,10 @@ def load_factor_data_from_strings():
         st.error(f"Error parsing embedded data: {e}")
         return None, None
 
-# Load the data
 ff3, ff5 = load_factor_data_from_strings()
-
-# Optional portfolio file – try to load from disk, but it's not critical
-port_data = None
-try:
-    port_path = os.path.join(os.path.dirname(__file__), 'Europe_25_Portfolios_ME_BE-ME.csv')
-    if os.path.exists(port_path):
-        port_data = pd.read_csv(port_path, skiprows=9)
-except:
-    pass
+if ff3 is None or ff5 is None:
+    st.error("Failed to load embedded factor data. Please check the app code.")
+    st.stop()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MACRO PERIODS
@@ -1119,43 +1370,15 @@ def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
     }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR
+# SIDEBAR – Clean, no disclaimers
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
     st.markdown("### 📊 Configuration")
-    
-    if not YFINANCE_AVAILABLE:
-        st.warning("⚠️ `yfinance` not installed. Individual stock download is disabled. Using European Portfolios only.")
-        asset_type = "European Portfolios"
-        st.markdown("**Asset Type**")
-        st.info("European Portfolios (only option available)")
-        selected_portfolio = st.selectbox("Select Portfolio", 
-                                          ["Portfolio 1", "Portfolio 2", "Portfolio 3", "Portfolio 4", 
-                                           "Portfolio 5", "Portfolio 10", "Portfolio 20", "Portfolio 25"])
-    else:
-        asset_type = st.radio("**Asset Type**", ["European Portfolios", "Individual Stocks"], 
-                             label_visibility="collapsed", horizontal=True)
-        
-        if asset_type == "European Portfolios":
-            st.markdown("**Select Portfolio**")
-            selected_portfolio = st.selectbox("", ["Portfolio 1", "Portfolio 2", "Portfolio 3", "Portfolio 4", 
-                                               "Portfolio 5", "Portfolio 10", "Portfolio 20", "Portfolio 25"],
-                                             label_visibility="collapsed")
-        else:
-            st.markdown("**Enter Tickers**")
-            ticker_input = st.text_input("Comma-separated", "ASML,SAP,HSBA,BBVA", 
-                                        label_visibility="collapsed")
-            selected_tickers = [t.strip().upper() for t in ticker_input.split(",") if t.strip()]
-    
-    st.divider()
-    
     st.markdown("**Macro Period**")
     selected_period = st.selectbox("", list(MACRO_PERIODS.keys()), label_visibility="collapsed")
     period_start, period_end = MACRO_PERIODS[selected_period]
-    
     st.divider()
-    
     st.markdown("**⚙️ Advanced**")
     risk_free_override = st.number_input("Risk-Free Rate (% annual)", 0.0, 10.0, 2.5, 0.1) / 100
 
@@ -1177,10 +1400,6 @@ st.markdown("""
 # MAIN EXECUTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-if ff3 is None or ff5 is None:
-    st.error("Failed to load embedded factor data. Please check the app code.")
-    st.stop()
-
 try:
     ff3_period = ff3[(ff3.index >= period_start) & (ff3.index <= period_end)].copy()
     ff5_period = ff5[(ff5.index >= period_start) & (ff5.index <= period_end)].copy()
@@ -1189,29 +1408,9 @@ try:
         st.error("No data available for selected period.")
         st.stop()
     
-    # Prepare returns
-    if asset_type == "European Portfolios" or not YFINANCE_AVAILABLE:
-        # Use a simple proxy for portfolios – in a real scenario you'd load the actual portfolio returns
-        # For demonstration, we use the market factor scaled by 0.5 as a placeholder.
-        returns = ff3_period[['Mkt-RF']] * 0.5
-        returns_display = f"**{selected_portfolio}** (Proxy)"
-    else:
-        returns_dict = {}
-        for ticker in selected_tickers:
-            try:
-                df = yf.download(ticker, start=period_start, end=period_end, 
-                               progress=False, auto_adjust=True)
-                if not df.empty:
-                    returns_dict[ticker] = df['Close'].pct_change() * 100
-            except:
-                pass
-        if not returns_dict:
-            st.warning("Could not fetch stock data. Using factor proxy.")
-            returns = ff3_period[['Mkt-RF']]
-            returns_display = "Factor Market Return (Proxy)"
-        else:
-            returns = pd.DataFrame(returns_dict).mean(axis=1) * 100
-            returns_display = ", ".join(selected_tickers)
+    # Use the market factor (Mkt-RF) as the return series
+    returns = ff3_period['Mkt-RF']
+    returns_display = "European Market (Mkt-RF)"
     
     common_idx = returns.index.intersection(ff3_period.index)
     if len(common_idx) < 12:
