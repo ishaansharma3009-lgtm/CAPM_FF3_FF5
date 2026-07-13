@@ -1,407 +1,837 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-from statsmodels.tsa.stattools import adfuller
+import numpy as np
+import warnings
+from datetime import datetime
+from pathlib import Path
+import plotly.graph_objects as go
 from scipy import stats
-import io
+import yfinance as yf
 
-# ---------------------------------------------------------------------------
-# 1. Data loading & models (same as before)
-# ---------------------------------------------------------------------------
+warnings.filterwarnings('ignore')
 
-REGIMES = {
-    1: {"label": "European sovereign debt crisis", "start": "2010-01", "end": "2012-12", "n_obs": 36,
-        "desc": "Sovereign debt tensions in peripheral Eurozone countries; high volatility."},
-    2: {"label": "Post-crisis recovery / QE era", "start": "2013-01", "end": "2019-12", "n_obs": 84,
-        "desc": "Gradual economic recovery, ECB quantitative easing, low inflation."},
-    3: {"label": "COVID shock / post-pandemic inflation", "start": "2020-01", "end": "2024-12", "n_obs": 60,
-        "desc": "Pandemic-induced market crash, rapid recovery, then high inflation and rate hikes."},
+st.set_page_config(
+    page_title="Factor Model Analyzer",
+    layout="wide",
+    page_icon="⚙️",
+    initial_sidebar_state="expanded"
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STYLING
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+    :root {
+        --bg:        #08090d;
+        --surface:   #0f1117;
+        --surface2:  #161820;
+        --border:    #1e2030;
+        --border2:   #2a2d42;
+        --accent:    #4fffb0;
+        --accent2:   #00c9ff;
+        --warn:      #ff6b6b;
+        --success:   #4fffb0;
+        --muted:     #4a4f6a;
+        --text:      #e8eaf0;
+        --text2:     #8b90ab;
+        --font-head: 'Space Grotesk', 'Trebuchet MS', sans-serif;
+        --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+    }
+
+    html, body, [data-testid="stAppViewContainer"],
+    [data-testid="stMain"], .main { background: var(--bg) !important; }
+
+    * { font-family: var(--font-mono) !important; }
+
+    [data-testid="stHeader"],
+    #stDecoration,
+    [data-testid="stToolbar"] { display: none !important; }
+
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-left: 2.5rem !important;
+        padding-right: 2.5rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 1600px !important;
+    }
+
+    [data-testid="stSidebar"] {
+        min-width: 300px !important;
+        width: 300px !important;
+        background: var(--surface) !important;
+        border-right: 1px solid var(--border) !important;
+    }
+
+    [data-testid="stSidebarCollapseButton"] { display: none !important; }
+
+    [data-testid="stSidebar"] * { color: var(--text) !important; }
+    
+    [data-testid="stSidebar"] .stSelectbox select,
+    [data-testid="stSidebar"] .stMultiSelect select,
+    [data-testid="stSidebar"] .stTextInput input,
+    [data-testid="stSidebar"] .stDateInput input {
+        background: var(--surface2) !important;
+        border: 1px solid var(--border2) !important;
+        color: var(--text) !important;
+        border-radius: 4px !important;
+    }
+
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stMarkdown p {
+        color: var(--text2) !important;
+        font-size: 0.7rem !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+    }
+
+    [data-testid="stSidebar"] h3 {
+        font-family: var(--font-head) !important;
+        color: var(--accent) !important;
+        font-size: 0.65rem !important;
+        letter-spacing: 0.2em !important;
+        text-transform: uppercase !important;
+        margin-top: 1.2rem !important;
+    }
+
+    [data-testid="stSidebar"] hr {
+        border-color: var(--border) !important;
+        margin: 0.8rem 0 !important;
+    }
+
+    .header-block {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        margin-bottom: 2rem;
+        padding-bottom: 1.4rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+        font-family: 'Space Grotesk', 'Trebuchet MS', Arial, sans-serif !important;
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.02em;
+    }
+
+    .logo span { color: var(--accent); }
+
+    .subtitle {
+        font-family: 'Space Grotesk', 'Trebuchet MS', Arial, sans-serif !important;
+        font-size: 0.85rem;
+        color: var(--text2);
+        letter-spacing: 0.05em;
+    }
+
+    .badge {
+        margin-left: auto;
+        background: rgba(79,255,176,0.07);
+        border: 1px solid rgba(79,255,176,0.25);
+        color: var(--accent);
+        font-size: 0.6rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 0.25rem 0.6rem;
+        border-radius: 3px;
+        white-space: nowrap;
+    }
+
+    .sec-label {
+        font-family: var(--font-head);
+        font-size: 0.6rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 1.8rem 0 0.8rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .sec-label::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+    }
+
+    .sec-label .dot {
+        width: 4px; height: 4px;
+        border-radius: 50%;
+        background: var(--accent);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+
+    .stat-cell {
+        background: var(--surface);
+        padding: 1rem 1.2rem;
+        position: relative;
+    }
+
+    .stat-cell:hover { background: var(--surface2); }
+
+    .stat-label {
+        font-size: 0.6rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text2);
+        margin-bottom: 0.35rem;
+    }
+
+    .stat-value {
+        font-family: var(--font-head);
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--accent);
+        line-height: 1;
+    }
+
+    .stat-sub {
+        font-size: 0.55rem;
+        color: var(--muted);
+        margin-top: 0.25rem;
+    }
+
+    .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 1.2rem;
+        margin-bottom: 1rem;
+    }
+
+    .panel-title {
+        font-size: 0.6rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--text2);
+        margin-bottom: 0.8rem;
+        padding-bottom: 0.6rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .rank-badge {
+        display: inline-block;
+        padding: 0.15rem 0.4rem;
+        border-radius: 3px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+    }
+
+    .rank-1 { background: rgba(79,255,176,0.15); color: var(--accent); }
+    .rank-2 { background: rgba(0,201,255,0.15); color: var(--accent2); }
+    .rank-3 { background: rgba(255,107,107,0.15); color: var(--warn); }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+
+    table thead {
+        background: var(--surface2);
+        border-bottom: 2px solid var(--border2);
+    }
+
+    table th {
+        padding: 0.7rem;
+        text-align: left;
+        color: var(--text2);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+    }
+
+    table td {
+        padding: 0.6rem 0.7rem;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+    }
+
+    table tbody tr:hover { background: rgba(79,255,176,0.03); }
+
+    .metric-highlight {
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    .metric-warn {
+        color: var(--warn);
+        font-weight: 600;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+</style>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOAD DATA (using relative paths)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@st.cache_data
+def load_factor_data():
+    """Load Fama-French factor data from CSV files in the same directory."""
+    try:
+        # Use relative paths – files must be in the same folder as this script
+        ff3 = pd.read_csv('Europe_3_Factors.csv', skiprows=6, index_col=0)
+        ff5 = pd.read_csv('Europe_5_Factors.csv', skiprows=6, index_col=0)
+        
+        # Clean data
+        for df in [ff3, ff5]:
+            df.index = pd.to_datetime(df.index.astype(str), format='%Y%m')
+            df.replace(-99.99, np.nan, inplace=True)
+            df = df / 100  # Convert to decimal
+        
+        return ff3, ff5
+    except FileNotFoundError as e:
+        st.error(
+            f"❌ Missing data file: {e.filename}\n\n"
+            "Please ensure all three CSV files are in the same directory as this script:\n"
+            "- Europe_3_Factors.csv\n"
+            "- Europe_5_Factors.csv\n"
+            "- Europe_25_Portfolios_ME_BE-ME.csv"
+        )
+        return None, None
+    except Exception as e:
+        st.error(f"Error loading factor data: {e}")
+        return None, None
+
+@st.cache_data
+def load_portfolio_data():
+    """Load European portfolios from CSV."""
+    try:
+        df = pd.read_csv('Europe_25_Portfolios_ME_BE-ME.csv', skiprows=9)
+        return df
+    except FileNotFoundError:
+        # Portfolio file is optional; we can still run with individual stocks
+        return None
+    except Exception as e:
+        st.warning(f"Could not load portfolio data: {e}")
+        return None
+
+ff3, ff5 = load_factor_data()
+port_data = load_portfolio_data()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MACROECONOMIC REGIMES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+MACRO_PERIODS = {
+    "Full Period (1990-2024)": (datetime(1990, 1, 1), datetime(2024, 12, 31)),
+    "Pre-GFC (1990-2007)": (datetime(1990, 1, 1), datetime(2007, 12, 31)),
+    "GFC Crisis (2008-2009)": (datetime(2008, 1, 1), datetime(2009, 12, 31)),
+    "Post-GFC Recovery (2010-2012)": (datetime(2010, 1, 1), datetime(2012, 12, 31)),
+    "ECB Stabilization (2013-2019)": (datetime(2013, 1, 1), datetime(2019, 12, 31)),
+    "COVID Pandemic (2020-2021)": (datetime(2020, 1, 1), datetime(2021, 12, 31)),
+    "Post-COVID (2022-2024)": (datetime(2022, 1, 1), datetime(2024, 12, 31)),
 }
 
-FULL_SAMPLE_START = "2010-01"
-FULL_SAMPLE_END = "2024-12"
-RF_TRANSITION_MONTH = "2019-10"
+# ═══════════════════════════════════════════════════════════════════════════════
+# REGRESSION MODELS
+# ═══════════════════════════════════════════════════════════════════════════════
 
-def _load_french_factor_file(content, factor_cols):
-    lines = content.decode("utf-8").splitlines()
-    header_idx = None
-    for i, line in enumerate(lines):
-        cells = [c.strip() for c in line.strip().split(",")]
-        if len(cells) >= 1 + len(factor_cols) and cells[1:1 + len(factor_cols)] == factor_cols:
-            header_idx = i
-            break
-    if header_idx is None:
-        raise ValueError("Could not locate header row")
-    records = []
-    for line in lines[header_idx + 1:]:
-        cells = [c.strip() for c in line.strip().split(",")]
-        if not cells or cells[0] == "":
-            break
-        key = cells[0]
-        if not (key.isdigit() and len(key) == 6):
-            break
-        records.append(cells[: 1 + len(factor_cols)])
-    df = pd.DataFrame(records, columns=["yyyymm"] + factor_cols)
-    df["date"] = pd.PeriodIndex(df["yyyymm"], freq="M")
-    df = df.drop(columns=["yyyymm"]).set_index("date")
-    df = df.apply(pd.to_numeric, errors="coerce")
-    df = df.replace(-99.99, np.nan)
-    return df
-
-def load_ff3(content):
-    return _load_french_factor_file(content, ["Mkt-RF", "SMB", "HML", "RF"])
-
-def load_ff5(content):
-    return _load_french_factor_file(content, ["Mkt-RF", "SMB", "HML", "RMW", "CMA", "RF"])
-
-def _load_25_portfolios(content):
-    lines = content.decode("utf-8").splitlines()
-    start_idx = None
-    for i, line in enumerate(lines):
-        if "Average Value Weighted Returns" in line and "Monthly" in line:
-            start_idx = i
-            break
-    if start_idx is None:
-        raise ValueError("Could not find Value Weighted Monthly block")
-    header_idx = start_idx + 1
-    header_cells = [c.strip() for c in lines[header_idx].strip().split(",")]
-    col_names = [c for c in header_cells if c != ""]
-    records = []
-    for line in lines[header_idx + 1:]:
-        cells = [c.strip() for c in line.strip().split(",")]
-        if not cells or cells[0] == "":
-            break
-        key = cells[0]
-        if not (key.isdigit() and len(key) == 6):
-            break
-        records.append(cells[: 1 + len(col_names)])
-    df = pd.DataFrame(records, columns=["yyyymm"] + col_names)
-    df["date"] = pd.PeriodIndex(df["yyyymm"], freq="M")
-    df = df.drop(columns=["yyyymm"]).set_index("date")
-    df = df.apply(pd.to_numeric, errors="coerce")
-    df = df.replace(-99.99, np.nan)
-    return df
-
-def load_portfolios_beme(content):
-    return _load_25_portfolios(content)
-
-def load_portfolios_op(content):
-    return _load_25_portfolios(content)
-
-def load_portfolios_inv(content):
-    return _load_25_portfolios(content)
-
-def _load_euribor_1m(content):
-    df = pd.read_csv(io.BytesIO(content))
-    df.columns = ["date", "time_period", "rate_annual_pct"]
-    df["date"] = pd.to_datetime(df["date"])
-    df["month"] = pd.PeriodIndex(df["date"], freq="M")
-    df = df.set_index("month")[["rate_annual_pct"]]
-    df["rate_annual_pct"] = pd.to_numeric(df["rate_annual_pct"], errors="coerce")
-    return df
-
-def _load_estr(content):
-    df = pd.read_csv(io.BytesIO(content))
-    df.columns = ["date", "time_period", "rate_annual_pct"]
-    df["date"] = pd.to_datetime(df["date"])
-    df["rate_annual_pct"] = pd.to_numeric(df["rate_annual_pct"], errors="coerce")
-    df["month"] = pd.PeriodIndex(df["date"], freq="M")
-    monthly = df.groupby("month")["rate_annual_pct"].mean().to_frame()
-    return monthly
-
-def build_rf_series(euribor_content, estr_content):
-    euribor = _load_euribor_1m(euribor_content)
-    estr = _load_estr(estr_content)
-    euribor["monthly_pct"] = ((1 + euribor["rate_annual_pct"] / 100) ** (1 / 12) - 1) * 100
-    estr["monthly_pct"] = ((1 + estr["rate_annual_pct"] / 100) ** (1 / 12) - 1) * 100
-    transition = pd.Period(RF_TRANSITION_MONTH, freq="M")
-    euribor_part = euribor.loc[euribor.index < transition, "monthly_pct"]
-    estr_part = estr.loc[estr.index >= transition, "monthly_pct"]
-    rf = pd.concat([euribor_part, estr_part]).sort_index()
-    rf = rf[~rf.index.duplicated(keep="last")]
-    rf.name = "RF_euro"
-    return rf.to_frame()
-
-def build_master_panel(files):
-    ff3 = load_ff3(files["ff3"]).rename(columns={"RF": "RF_french"})
-    ff5 = load_ff5(files["ff5"]).rename(columns={"RF": "RF_french"})
-    beme = load_portfolios_beme(files["beme"])
-    op = load_portfolios_op(files["op"])
-    inv = load_portfolios_inv(files["inv"])
-    rf_euro = build_rf_series(files["euribor"], files["estr"])
-    full_idx = pd.period_range(FULL_SAMPLE_START, FULL_SAMPLE_END, freq="M")
-    def _clip(df):
-        return df.reindex(full_idx)
-    ff3, ff5 = _clip(ff3), _clip(ff5)
-    beme, op, inv = _clip(beme), _clip(op), _clip(inv)
-    rf_euro = _clip(rf_euro)
-    rf_check = pd.DataFrame({
-        "RF_french": ff3["RF_french"],
-        "RF_euro": rf_euro["RF_euro"],
-    })
-    rf_check["diff"] = rf_check["RF_euro"] - rf_check["RF_french"]
-    excess_returns = {
-        "beme": beme.sub(rf_euro["RF_euro"], axis=0),
-        "op": op.sub(rf_euro["RF_euro"], axis=0),
-        "inv": inv.sub(rf_euro["RF_euro"], axis=0),
-    }
-    factors_excess = {
-        "ff3": ff3.drop(columns=["RF_french"]).join(rf_euro),
-        "ff5": ff5.drop(columns=["RF_french"]).join(rf_euro),
-    }
-    missing_rf_months = rf_euro["RF_euro"].isna().sum()
+def run_capm(returns, risk_free, market_premium):
+    """CAPM: E(R) = Rf + β(Rm - Rf)"""
+    if len(returns) < 12:
+        return None
+    
+    y = returns.values - risk_free.values
+    X = market_premium.values.reshape(-1, 1)
+    
+    X_with_const = np.column_stack([np.ones(len(X)), X])
+    beta = np.linalg.lstsq(X_with_const, y, rcond=None)[0]
+    
+    y_pred = X_with_const @ beta
+    residuals = y - y_pred
+    rss = np.sum(residuals**2)
+    tss = np.sum((y - y.mean())**2)
+    r_squared = 1 - (rss / tss)
+    
+    n = len(y)
+    mse = rss / (n - 2)
+    var_covar = mse * np.linalg.inv(X_with_const.T @ X_with_const)
+    std_errors = np.sqrt(np.diag(var_covar))
+    t_stats = beta / std_errors
+    p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), n - 2))
+    
     return {
-        "ff3": ff3,
-        "ff5": ff5,
-        "portfolios": {"beme": beme, "op": op, "inv": inv},
-        "rf": rf_euro,
-        "rf_check": rf_check,
-        "excess_returns": excess_returns,
-        "factors_excess": factors_excess,
-        "missing_rf_months": missing_rf_months,
+        'alpha': beta[0],
+        'beta': beta[1],
+        'r_squared': r_squared,
+        'alpha_se': std_errors[0],
+        'beta_se': std_errors[1],
+        'alpha_t': t_stats[0],
+        'beta_t': t_stats[1],
+        'alpha_p': p_values[0],
+        'beta_p': p_values[1],
+        'n_obs': n
     }
 
-def split_by_regime(df):
-    out = {}
-    for rid, spec in REGIMES.items():
-        start = pd.Period(spec["start"], freq="M")
-        end = pd.Period(spec["end"], freq="M")
-        sub = df.loc[(df.index >= start) & (df.index <= end)]
-        out[rid] = sub
-    return out
-
-# ---------------------------------------------------------------------------
-# 2. Models
-# ---------------------------------------------------------------------------
-
-MODEL_FACTORS = {
-    "CAPM": ["Mkt-RF"],
-    "FF3": ["Mkt-RF", "SMB", "HML"],
-    "FF5": ["Mkt-RF", "SMB", "HML", "RMW", "CMA"],
-}
-
-def newey_west_lags(n_obs):
-    lag = int(np.floor(4 * (n_obs / 100) ** (2 / 9)))
-    return max(lag, 1)
-
-def run_ols_hac(y, X_df):
-    aligned = pd.concat([y, X_df], axis=1).dropna()
-    yy = aligned.iloc[:, 0]
-    XX = sm.add_constant(aligned.iloc[:, 1:])
-    n = len(aligned)
-    lag = newey_west_lags(n)
-    model = sm.OLS(yy, XX)
-    res = model.fit(cov_type="HAC", cov_kwds={"maxlags": lag, "use_correction": True})
-    return res, lag, n
-
-def run_block(portfolio_returns, factors_df, model_name):
-    factor_cols = MODEL_FACTORS[model_name]
-    X = factors_df[factor_cols]
-    alphas = {}
-    adj_r2 = {}
-    resid_dict = {}
-    lag_used = None
-    n_used = None
-    for col in portfolio_returns.columns:
-        y = portfolio_returns[col]
-        res, lag, n = run_ols_hac(y, X)
-        alphas[col] = res.params["const"]
-        adj_r2[col] = res.rsquared_adj
-        resid_dict[col] = res.resid
-        lag_used = lag
-        n_used = n
-    alphas = pd.Series(alphas)
-    adj_r2 = pd.Series(adj_r2)
-    resid_mat = pd.DataFrame(resid_dict)
+def run_ff3(returns, risk_free, market_premium, smb, hml):
+    """Fama-French 3-factor: E(R) = α + β₁MKT + β₂SMB + β₃HML"""
+    common = returns.index.intersection(market_premium.index).intersection(smb.index).intersection(hml.index)
+    if len(common) < 12:
+        return None
+    
+    y = (returns.loc[common] - risk_free.loc[common]).values
+    X = np.column_stack([
+        market_premium.loc[common].values,
+        smb.loc[common].values,
+        hml.loc[common].values
+    ])
+    X_with_const = np.column_stack([np.ones(len(X)), X])
+    beta = np.linalg.lstsq(X_with_const, y, rcond=None)[0]
+    
+    y_pred = X_with_const @ beta
+    residuals = y - y_pred
+    rss = np.sum(residuals**2)
+    tss = np.sum((y - y.mean())**2)
+    r_squared = 1 - (rss / tss)
+    
+    n = len(y)
+    mse = rss / (n - 4)
+    var_covar = mse * np.linalg.inv(X_with_const.T @ X_with_const)
+    std_errors = np.sqrt(np.diag(var_covar))
+    t_stats = beta / std_errors
+    p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), n - 4))
+    
     return {
-        "alphas": alphas,
-        "adj_r2": adj_r2,
-        "resid_mat": resid_mat,
-        "lag": lag_used,
-        "n_obs": n_used,
-        "k_factors": len(factor_cols),
+        'alpha': beta[0],
+        'mkt': beta[1],
+        'smb': beta[2],
+        'hml': beta[3],
+        'r_squared': r_squared,
+        'alpha_se': std_errors[0],
+        'alpha_p': p_values[0],
+        'n_obs': n
     }
 
-def grs_test(alphas, resid_mat, factors_df, factor_cols):
-    aligned = pd.concat([resid_mat, factors_df[factor_cols]], axis=1).dropna()
-    resid_aligned = aligned[resid_mat.columns]
-    factors_aligned = aligned[factor_cols]
-    T = len(aligned)
-    N = resid_mat.shape[1]
-    K = len(factor_cols)
-    alpha_vec = alphas.loc[resid_mat.columns].values.reshape(-1, 1)
-    Sigma = (resid_aligned.T @ resid_aligned).values / T
-    mu = factors_aligned.mean().values.reshape(-1, 1)
-    Omega = np.cov(factors_aligned.values, rowvar=False, ddof=0)
-    if K == 1:
-        Omega = np.array([[Omega]]) if np.isscalar(Omega) else Omega.reshape(1, 1)
-    Sigma_inv = np.linalg.inv(Sigma)
-    Omega_inv = np.linalg.inv(Omega)
-    quad_alpha = (alpha_vec.T @ Sigma_inv @ alpha_vec).item()
-    quad_mu = (mu.T @ Omega_inv @ mu).item()
-    df1 = N
-    df2 = T - N - K
-    if df2 <= 0:
-        return {"GRS_F": np.nan, "df1": df1, "df2": df2, "p_value": np.nan, "note": "Insufficient df"}
-    F = ((T - N - K) / N) * (quad_alpha / (1 + quad_mu))
-    p_value = 1 - stats.f.cdf(F, df1, df2)
-    return {"GRS_F": F, "df1": df1, "df2": df2, "p_value": p_value, "note": ""}
+def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
+    """Fama-French 5-factor"""
+    common = returns.index.intersection(market_premium.index).intersection(smb.index)\
+                   .intersection(hml.index).intersection(rmw.index).intersection(cma.index)
+    if len(common) < 12:
+        return None
+    
+    y = (returns.loc[common] - risk_free.loc[common]).values
+    X = np.column_stack([
+        market_premium.loc[common].values,
+        smb.loc[common].values,
+        hml.loc[common].values,
+        rmw.loc[common].values,
+        cma.loc[common].values
+    ])
+    X_with_const = np.column_stack([np.ones(len(X)), X])
+    beta = np.linalg.lstsq(X_with_const, y, rcond=None)[0]
+    
+    y_pred = X_with_const @ beta
+    residuals = y - y_pred
+    rss = np.sum(residuals**2)
+    tss = np.sum((y - y.mean())**2)
+    r_squared = 1 - (rss / tss)
+    
+    n = len(y)
+    mse = rss / (n - 6)
+    var_covar = mse * np.linalg.inv(X_with_const.T @ X_with_const)
+    std_errors = np.sqrt(np.diag(var_covar))
+    t_stats = beta / std_errors
+    p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), n - 6))
+    
+    return {
+        'alpha': beta[0],
+        'mkt': beta[1],
+        'smb': beta[2],
+        'hml': beta[3],
+        'rmw': beta[4],
+        'cma': beta[5],
+        'r_squared': r_squared,
+        'alpha_se': std_errors[0],
+        'alpha_p': p_values[0],
+        'n_obs': n
+    }
 
-# ---------------------------------------------------------------------------
-# 3. Streamlit UI
-# ---------------------------------------------------------------------------
+# ═══════════════════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ═══════════════════════════════════════════════════════════════════════════════
 
-st.set_page_config(page_title="CAPM/FF3/FF5 Interactive Comparison", layout="wide")
-st.title("📈 CAPM / FF3 / FF5 – Interactive Regime & Stock Selection")
+with st.sidebar:
+    st.markdown("### 📊 Configuration")
+    
+    asset_type = st.radio("**Asset Type**", ["European Portfolios", "Individual Stocks"], 
+                         label_visibility="collapsed", horizontal=True)
+    
+    if asset_type == "European Portfolios":
+        st.markdown("**Select Portfolio**")
+        portfolio_options = ["Portfolio 1", "Portfolio 2", "Portfolio 3", "Portfolio 4", 
+                           "Portfolio 5", "Portfolio 10", "Portfolio 20", "Portfolio 25"]
+        selected_portfolio = st.selectbox("", portfolio_options, label_visibility="collapsed")
+    else:
+        st.markdown("**Enter Tickers**")
+        ticker_input = st.text_input("Comma-separated", "ASML,SAP,HSBA,BBVA", 
+                                    label_visibility="collapsed")
+        selected_tickers = [t.strip().upper() for t in ticker_input.split(",") if t.strip()]
+    
+    st.divider()
+    
+    st.markdown("**Macro Period**")
+    selected_period = st.selectbox("", list(MACRO_PERIODS.keys()), label_visibility="collapsed")
+    period_start, period_end = MACRO_PERIODS[selected_period]
+    
+    st.divider()
+    
+    st.markdown("**⚙️ Advanced**")
+    risk_free_override = st.number_input("Risk-Free Rate (% annual)", 0.0, 10.0, 2.5, 0.1) / 100
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HEADER
+# ═══════════════════════════════════════════════════════════════════════════════
 
 st.markdown("""
-Upload the 7 required CSV files, then **choose which regimes and portfolios** you want to analyze.
-The app will show you how CAPM, FF3, and FF5 perform for your selections.
-""")
+<div class="header-block">
+    <div>
+        <div class="logo">FACTOR <span>MODEL</span> ANALYZER</div>
+        <div class="subtitle">CAPM vs FF3 vs FF5 Comparison</div>
+    </div>
+    <div class="badge">📈 Analysis Ready</div>
+</div>
+""", unsafe_allow_html=True)
 
-required_files = {
-    "ff3": "Europe_3_Factors.csv",
-    "ff5": "Europe_5_Factors.csv",
-    "beme": "Europe_25_Portfolios_ME_BE-ME.csv",
-    "op": "Europe_25_Portfolios_ME_OP.csv",
-    "inv": "Europe_25_Portfolios_ME_INV.csv",
-    "euribor": "Euribor_1M.csv",
-    "estr": "ESTR.csv",
-}
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN EXECUTION
+# ═══════════════════════════════════════════════════════════════════════════════
 
-uploaded = {}
-cols = st.columns(3)
-for i, (key, fname) in enumerate(required_files.items()):
-    col = cols[i % 3]
-    uploaded[key] = col.file_uploader(f"📄 {fname}", type="csv", key=key)
+if ff3 is None or ff5 is None:
+    st.stop()  # Error already displayed
 
-if all(uploaded.values()):
-    if st.button("🚀 Load & Process Data", type="primary"):
-        with st.spinner("Loading and processing data..."):
+try:
+    ff3_period = ff3[(ff3.index >= period_start) & (ff3.index <= period_end)].copy()
+    ff5_period = ff5[(ff5.index >= period_start) & (ff5.index <= period_end)].copy()
+    
+    if ff3_period.empty:
+        st.error("No data available for selected period.")
+        st.stop()
+    
+    # Prepare return data
+    if asset_type == "European Portfolios":
+        # Use FF factor data as proxy returns
+        returns = ff3_period[['Mkt-RF']] * 0.5  # Simplified
+        returns_display = f"**{selected_portfolio}** (Proxy)"
+    else:
+        returns_dict = {}
+        for ticker in selected_tickers:
             try:
-                files = {k: v.getvalue() for k, v in uploaded.items()}
-                panel = build_master_panel(files)
-                ff3_regimes = split_by_regime(panel["factors_excess"]["ff3"])
-                ff5_regimes = split_by_regime(panel["factors_excess"]["ff5"])
-                excess_beme_regimes = split_by_regime(panel["excess_returns"]["beme"])
-                excess_op_regimes = split_by_regime(panel["excess_returns"]["op"])
-                excess_inv_regimes = split_by_regime(panel["excess_returns"]["inv"])
-                excess_by_asset = {"beme": excess_beme_regimes, "op": excess_op_regimes, "inv": excess_inv_regimes}
-                factors_by_model = {"CAPM": ff3_regimes, "FF3": ff3_regimes, "FF5": ff5_regimes}
-
-                # Run all regressions once and store results in session state
-                all_results = []
-                for model_name in ["CAPM", "FF3", "FF5"]:
-                    for rid in REGIMES:
-                        factors_df = factors_by_model[model_name][rid]
-                        port_ret = excess_by_asset["beme"][rid]   # use BE/ME portfolios for main selection
-                        block = run_block(port_ret, factors_df, model_name)
-                        grs = grs_test(block["alphas"], block["resid_mat"], factors_df, MODEL_FACTORS[model_name])
-                        for pf in block["alphas"].index:
-                            all_results.append({
-                                "model": model_name,
-                                "regime": rid,
-                                "regime_label": REGIMES[rid]["label"],
-                                "portfolio": pf,
-                                "alpha": block["alphas"][pf],
-                                "adj_r2": block["adj_r2"][pf],
-                                "grs_f": grs["GRS_F"],
-                                "grs_p": grs["p_value"],
-                                "n_obs": block["n_obs"],
-                                "k_factors": block["k_factors"],
-                            })
-                st.session_state["results"] = pd.DataFrame(all_results)
-                st.success("✅ Data processed! Now choose your selections below.")
-
-            except Exception as e:
-                st.error(f"Error: {e}")
-                st.exception(e)
-
-# ---------------------------------------------------------------------------
-# Interactive selection (only if results exist)
-# ---------------------------------------------------------------------------
-
-if "results" in st.session_state and st.session_state["results"] is not None:
-    df = st.session_state["results"]
-
-    st.header("🎯 Select your analysis parameters")
-
-    # Regime selection
-    regime_labels = df["regime_label"].unique().tolist()
-    selected_regimes = st.multiselect(
-        "Choose macroeconomic regime(s)",
-        options=regime_labels,
-        default=regime_labels,  # select all by default
-    )
-
-    # Portfolio selection
-    portfolio_names = sorted(df["portfolio"].unique().tolist())
-    select_all = st.checkbox("Select all portfolios", value=True)
-    if select_all:
-        selected_portfolios = portfolio_names
-    else:
-        selected_portfolios = st.multiselect(
-            "Choose portfolios (see legend below)",
-            options=portfolio_names,
-            default=portfolio_names[:5],  # a few defaults
-        )
-
-    if selected_regimes and selected_portfolios:
-        filtered = df[
-            (df["regime_label"].isin(selected_regimes)) &
-            (df["portfolio"].isin(selected_portfolios))
-        ]
-
-        if filtered.empty:
-            st.warning("No data for these selections. Please adjust your choices.")
+                df = yf.download(ticker, start=period_start, end=period_end, 
+                               progress=False, auto_adjust=True)
+                if not df.empty:
+                    returns_dict[ticker] = df['Close'].pct_change() * 100
+            except:
+                pass
+        
+        if not returns_dict:
+            st.warning("Could not fetch stock data. Using factor proxy.")
+            returns = ff3_period[['Mkt-RF']]
+            returns_display = "Factor Market Return (Proxy)"
         else:
-            # Show summary table
-            st.subheader("📊 Model Comparison for Selected Stocks & Regimes")
-            # Group by model and regime, compute averages
-            summary = filtered.groupby(["model", "regime_label"]).agg({
-                "adj_r2": "mean",
-                "alpha": lambda x: x.abs().mean(),
-                "grs_f": "first",
-                "grs_p": "first",
-                "n_obs": "first",
-                "k_factors": "first",
-            }).reset_index()
-            summary["avg_abs_alpha"] = summary["alpha"]
-            summary = summary.rename(columns={
-                "adj_r2": "Avg Adj R²",
-                "avg_abs_alpha": "Avg |α|",
-                "grs_f": "GRS F",
-                "grs_p": "GRS p-value",
-            })
-            summary = summary[["model", "regime_label", "Avg Adj R²", "Avg |α|", "GRS F", "GRS p-value"]]
-            st.dataframe(summary.style.format({
-                "Avg Adj R²": "{:.4f}",
-                "Avg |α|": "{:.4f}",
-                "GRS F": "{:.4f}",
-                "GRS p-value": "{:.4f}",
-            }))
+            returns = pd.DataFrame(returns_dict).mean(axis=1) * 100
+            returns_display = ", ".join(selected_tickers)
+    
+    common_idx = returns.index.intersection(ff3_period.index)
+    if len(common_idx) < 12:
+        st.error("Insufficient overlapping data.")
+        st.stop()
+    
+    returns = returns.loc[common_idx]
+    rf = ff3_period.loc[common_idx, 'RF']
+    mkt = ff3_period.loc[common_idx, 'Mkt-RF']
+    smb = ff3_period.loc[common_idx, 'SMB']
+    hml = ff3_period.loc[common_idx, 'HML']
+    
+    rmw = ff5_period.loc[common_idx, 'RMW'] if 'RMW' in ff5_period.columns else pd.Series(0, index=common_idx)
+    cma = ff5_period.loc[common_idx, 'CMA'] if 'CMA' in ff5_period.columns else pd.Series(0, index=common_idx)
+    
+    capm_res = run_capm(returns, rf, mkt)
+    ff3_res = run_ff3(returns, rf, mkt, smb, hml)
+    ff5_res = run_ff5(returns, rf, mkt, smb, hml, rmw, cma)
+    
+    if capm_res is None or ff3_res is None or ff5_res is None:
+        st.error("Insufficient data for regression analysis.")
+        st.stop()
+    
+    # ─── RESULTS DISPLAY ──────────────────────────────────────────────────────
+    
+    st.markdown(f'<div class="sec-label"><span class="dot"></span> Analysis Results ({selected_period})</div>',
+                unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div class="stats-grid">
+        <div class="stat-cell">
+            <div class="stat-label">Asset</div>
+            <div class="stat-value" style="font-size:1.2rem">{returns_display}</div>
+            <div class="stat-sub">Analysis Target</div>
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">Period</div>
+            <div class="stat-value" style="font-size:1rem">{capm_res['n_obs']} months</div>
+            <div class="stat-sub">Observations</div>
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">Market Return</div>
+            <div class="stat-value">{mkt.mean()*12:.1f}%</div>
+            <div class="stat-sub">Annualized</div>
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">Risk-Free Rate</div>
+            <div class="stat-value">{rf.mean()*12:.2f}%</div>
+            <div class="stat-sub">Annualized</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="sec-label"><span class="dot"></span> Model Comparison</div>',
+                unsafe_allow_html=True)
+    
+    comparison_data = {
+        'Metric': [
+            'Alpha (%)',
+            'Alpha t-stat',
+            'Alpha p-value',
+            'R² (Goodness-of-Fit)',
+            'Model Factors',
+            'Observations',
+        ],
+        'CAPM': [
+            f"{capm_res['alpha']*100:.3f}",
+            f"{capm_res['alpha_t']:.2f}",
+            f"{capm_res['alpha_p']:.4f}",
+            f"{capm_res['r_squared']:.4f}",
+            "1 (Market)",
+            f"{capm_res['n_obs']}"
+        ],
+        'FF3': [
+            f"{ff3_res['alpha']*100:.3f}",
+            f"{ff3_res['alpha_t']:.2f}",
+            f"{ff3_res['alpha_p']:.4f}",
+            f"{ff3_res['r_squared']:.4f}",
+            "3 (MKT, SMB, HML)",
+            f"{ff3_res['n_obs']}"
+        ],
+        'FF5': [
+            f"{ff5_res['alpha']*100:.3f}",
+            f"{ff5_res['alpha_t']:.2f}",
+            f"{ff5_res['alpha_p']:.4f}",
+            f"{ff5_res['r_squared']:.4f}",
+            "5 (MKT, SMB, HML, RMW, CMA)",
+            f"{ff5_res['n_obs']}"
+        ]
+    }
+    
+    comp_df = pd.DataFrame(comparison_data)
+    
+    st.markdown("""
+    <div class="panel">
+        <div class="panel-title">// Factor Model Regression Results</div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(f"""
+        **CAPM**
+        - α = {capm_res['alpha']*100:.3f}% (t={capm_res['alpha_t']:.2f})
+        - β = {capm_res['beta']:.3f}
+        - R² = {capm_res['r_squared']:.4f}
+        - n = {capm_res['n_obs']}
+        """)
+    
+    with col2:
+        st.markdown(f"""
+        **Fama-French 3**
+        - α = {ff3_res['alpha']*100:.3f}% (t={ff3_res['alpha_t']:.2f})
+        - MKT β = {ff3_res['mkt']:.3f}
+        - SMB β = {ff3_res['smb']:.3f}
+        - HML β = {ff3_res['hml']:.3f}
+        - R² = {ff3_res['r_squared']:.4f}
+        """)
+    
+    with col3:
+        st.markdown(f"""
+        **Fama-French 5**
+        - α = {ff5_res['alpha']*100:.3f}% (t={ff5_res['alpha_t']:.2f})
+        - MKT β = {ff5_res['mkt']:.3f}
+        - SMB β = {ff5_res['smb']:.3f}
+        - HML β = {ff5_res['hml']:.3f}
+        - RMW β = {ff5_res['rmw']:.3f}
+        - CMA β = {ff5_res['cma']:.3f}
+        - R² = {ff5_res['r_squared']:.4f}
+        """)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # ─── RANKING TABLE ────────────────────────────────────────────────────────
+    
+    st.markdown('<div class="sec-label"><span class="dot"></span> Model Effectiveness Ranking</div>',
+                unsafe_allow_html=True)
+    
+    r2_scores = {
+        'CAPM': capm_res['r_squared'],
+        'FF3': ff3_res['r_squared'],
+        'FF5': ff5_res['r_squared']
+    }
+    
+    alpha_sig = {
+        'CAPM': abs(capm_res['alpha_p']) < 0.05,
+        'FF3': abs(ff3_res['alpha_p']) < 0.05,
+        'FF5': abs(ff5_res['alpha_p']) < 0.05
+    }
+    
+    ranked = sorted(r2_scores.items(), key=lambda x: x[1], reverse=True)
+    
+    ranking_html = """
+    <div class="panel">
+        <div class="panel-title">// Ranking by Explanatory Power (R²)</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Model</th>
+                    <th>R²</th>
+                    <th>Improvement</th>
+                    <th>Alpha Significant</th>
+                    <th>Verdict</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    for idx, (model, r2) in enumerate(ranked, 1):
+        rank_class = f"rank-{idx}"
+        badge = f'<span class="rank-badge {rank_class}">#{idx}</span>'
+        improvement = "-"
+        if idx > 1:
+            improvement = f"{(r2 - ranked[0][1]) / ranked[0][1] * 100:+.1f}%"
+        
+        is_sig = "✓ Yes" if alpha_sig[model] else "✗ No"
+        sig_class = "metric-highlight" if alpha_sig[model] else ""
+        
+        if idx == 1:
+            verdict = "🏆 Best Model"
+            verdict_class = "metric-highlight"
+        elif idx == 2:
+            verdict = "🥈 Strong"
+            verdict_class = "metric-highlight"
+        else:
+            verdict = "⚠️ Limited"
+            verdict_class = "metric-warn"
+        
+        ranking_html += f"""
+                <tr>
+                    <td>{badge}</td>
+                    <td><strong>{model}</strong></td>
+                    <td><span class="metric-highlight">{r2:.4f}</span></td>
+                    <td>{improvement}</td>
+                    <td><span class="{sig_class}">{is_sig}</span></td>
+                    <td><span class="{verdict_class}">{verdict}</span></td>
+                </tr>
+        """
+    
+    ranking_html += """
+            </tbody>
+        </table>
+    </div>
+    """
+    
+    st.markdown(ranking_html, unsafe_allow_html=True)
+    
+    # ─── INSIGHTS ─────────────────────────────────────────────────────────────
+    
+    st.markdown('<div class="sec-label"><span class="dot"></span> Key Insights</div>',
+                unsafe_allow_html=True)
+    
+    best_model = ranked[0][0]
+    best_r2 = ranked[0][1]
+    improvement_3_to_capm = (ff3_res['r_squared'] - capm_res['r_squared']) / capm_res['r_squared'] * 100
+    improvement_5_to_3 = (ff5_res['r_squared'] - ff3_res['r_squared']) / ff3_res['r_squared'] * 100
+    
+    insights_col1, insights_col2 = st.columns(2)
+    
+    with insights_col1:
+        st.markdown(f"""
+        ### 🎯 Best Performer
+        **{best_model}** dominates with R² = {best_r2:.4f}
+        
+        - Explains {best_r2*100:.1f}% of return variation
+        - {"Alpha is statistically significant" if alpha_sig[best_model] else "Alpha is not statistically significant"}
+        - **Recommendation:** Use {best_model} for this period
+        """)
+    
+    with insights_col2:
+        st.markdown(f"""
+        ### 📊 Factor Effectiveness
+        - **FF3 → CAPM:** +{improvement_3_to_capm:.1f}% improvement
+        - **FF5 → FF3:** {improvement_5_to_3:+.1f}% change
+        
+        {f"SMB/HML factors substantially improve explanatory power" if improvement_3_to_capm > 5 else "SMB/HML offer modest marginal benefit"}
+        
+        {f"RMW/CMA factors add value" if improvement_5_to_3 > 0 else "RMW/CMA provide diminishing returns"}
+        """)
+    
+    st.markdown('<div class="sec-label"><span class="dot"></span> Detailed Metrics</div>',
+                unsafe_allow_html=True)
+    
+    st.dataframe(comp_df.style.format({
+        'CAPM': '{}',
+        'FF3': '{}',
+        'FF5': '{}'
+    }), use_container_width=True)
+    
+    # ─── EXPORT ──────────────────────────────────────────────────────────────
+    
+    st.markdown('<div class="sec-label"><span class="dot"></span> Export Results</div>',
+                unsafe_allow_html=True)
+    
+    export_data = {
+        'Model': ['CAPM', 'FF3', 'FF5'],
+        'R_Squared': [capm_res['r_squared'], ff3_res['r_squared'], ff5_res['r_squared']],
+        'Alpha_%': [capm_res['alpha']*100, ff3_res['alpha']*100, ff5_res['alpha']*100],
+        'Alpha_t_stat': [capm_res['alpha_t'], ff3_res['alpha_t'], ff5_res['alpha_t']],
+        'Alpha_p_value': [capm_res['alpha_p'], ff3_res['alpha_p'], ff5_res['alpha_p']],
+        'Observations': [capm_res['n_obs'], ff3_res['n_obs'], ff5_res['n_obs']],
+        'Period': [selected_period] * 3,
+        'Asset': [returns_display] * 3
+    }
+    
+    export_df = pd.DataFrame(export_data)
+    
+    e1, e2 = st.columns(2)
+    with e1:
+        csv = export_df.to_csv(index=False)
+        st.download_button("📥 Download Results (CSV)", csv.encode(),
+                          "factor_model_comparison.csv", "text/csv")
+    
+    with e2:
+        st.info("💡 **Tip:** Download results for further analysis or reporting")
 
-            # Bar chart comparing models
-            st.subheader("📊 Model Comparison (Bar Chart)")
-            chart_data = summary.pivot(index="regime_label", columns="model", values="Avg Adj R²")
-            st.bar_chart(chart_data)
-
-            # Also show a chart for Avg |α| (lower is better)
-            st.subheader("📊 Average Absolute Alpha (lower is better)")
-            alpha_chart = summary.pivot(index="regime_label", columns="model", values="Avg |α|")
-            st.bar_chart(alpha_chart)
-
-            # Show selected portfolios legend
-            with st.expander("📋 Selected portfolios"):
-                st.write(selected_portfolios)
-
-            # Download filtered data
-            csv = filtered.to_csv(index=False)
-            st.download_button("⬇️ Download selected results (CSV)", data=csv, file_name="selected_analysis.csv", mime="text/csv")
-
-    else:
-        st.info("Select at least one regime and one portfolio to see results.")
-
-else:
-    st.info("Please upload the data files and click 'Load & Process Data' first.")
+except Exception as e:
+    st.error(f"Analysis Error: {e}")
+    with st.expander("Debug Info"):
+        import traceback
+        st.code(traceback.format_exc())
