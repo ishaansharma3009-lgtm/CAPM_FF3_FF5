@@ -724,46 +724,6 @@ Missing data are indicated by -99.99.
 202603   ,-9.30    ,0.00    ,3.00    ,0.29
 202604    ,6.48    ,1.92   ,-0.32    ,0.29
 202605    ,3.11    ,0.74   ,-1.25    ,0.31
-
-
-
- Annual Factors: January-December
-,Mkt-RF,SMB,HML,RF
-1991    ,4.55  ,-10.70   ,-6.87    ,5.60
-1992  ,-11.29  ,-11.65   ,-1.31    ,3.51
-1993   ,25.52    ,3.42   ,22.25    ,2.90
-1994   ,-0.48    ,7.95    ,6.68    ,3.90
-1995   ,13.33  ,-10.12   ,-6.66    ,5.60
-1996   ,16.52   ,-2.29    ,2.01    ,5.21
-1997   ,14.85  ,-13.49   ,12.51    ,5.26
-1998   ,20.52  ,-15.51   ,-0.95    ,4.86
-1999   ,15.03   ,15.60  ,-23.26    ,4.68
-2000  ,-15.88   ,-5.61   ,27.73    ,5.89
-2001  ,-23.92    ,0.41   ,26.12    ,3.83
-2002  ,-15.71    ,7.92   ,21.57    ,1.65
-2003   ,41.68   ,14.18   ,20.47    ,1.02
-2004   ,22.56    ,8.63   ,11.16    ,1.20
-2005    ,8.82    ,5.87    ,9.44    ,2.98
-2006   ,32.20    ,7.56   ,11.07    ,4.80
-2007    ,9.69   ,-9.26   ,-0.06    ,4.66
-2008  ,-47.45   ,-6.47   ,-3.29    ,1.60
-2009   ,35.15   ,14.32    ,1.55    ,0.10
-2010    ,6.31    ,9.92   ,-8.62    ,0.12
-2011  ,-13.12   ,-7.22  ,-12.89    ,0.04
-2012   ,20.77    ,1.21    ,1.90    ,0.06
-2013   ,28.00    ,8.58   ,10.35    ,0.02
-2014   ,-6.34   ,-2.36   ,-5.29    ,0.02
-2015   ,-0.51   ,10.57  ,-16.75    ,0.02
-2016   ,-0.04    ,4.11   ,11.08    ,0.20
-2017   ,28.21    ,6.39    ,3.01    ,0.80
-2018  ,-16.08   ,-4.27   ,-3.34    ,1.81
-2019   ,21.81   ,-1.18  ,-11.77    ,2.14
-2020    ,9.23   ,14.86  ,-30.11    ,0.44
-2021   ,16.77   ,-2.12    ,4.98    ,0.04
-2022  ,-18.61   ,-9.01   ,19.15    ,1.42
-2023   ,13.37   ,-8.67    ,9.13    ,4.95
-2024   ,-4.41   ,-4.72    ,8.36    ,5.26
-2025   ,30.55   ,-8.63   ,29.57    ,4.25
 """
 
 EUROPE_5_FACTORS_CSV = """This file was created using the 202605 Bloomberg database.
@@ -1204,50 +1164,10 @@ Missing data are indicated by -99.99.
 202603   ,-9.30    ,0.24    ,3.00   ,-1.15    ,2.23    ,0.29
 202604    ,6.48    ,1.78   ,-0.32   ,-1.51   ,-1.26    ,0.29
 202605    ,3.11    ,0.51   ,-1.25   ,-2.41   ,-2.61    ,0.31
-
-
-
- Annual Factors: January-December
-,Mkt-RF,SMB,HML,RMW,CMA,RF
-1991    ,4.55  ,-10.11   ,-6.87   ,18.77   ,-2.24    ,5.60
-1992  ,-11.29  ,-11.38   ,-1.31    ,8.89    ,2.71    ,3.51
-1993   ,25.52    ,5.14   ,22.25   ,-4.54   ,13.48    ,2.90
-1994   ,-0.48    ,9.33    ,6.68    ,2.70    ,4.28    ,3.90
-1995   ,13.33   ,-9.73   ,-6.66    ,8.73   ,-7.44    ,5.60
-1996   ,16.52   ,-1.27    ,2.01   ,15.70   ,-3.08    ,5.21
-1997   ,14.85  ,-12.00   ,12.51   ,-1.31    ,1.27    ,5.26
-1998   ,20.52  ,-15.14   ,-0.95    ,2.06   ,-6.00    ,4.86
-1999   ,15.03   ,11.75  ,-23.26   ,11.10  ,-20.79    ,4.68
-2000  ,-15.88   ,-3.54   ,27.73   ,-1.78   ,15.67    ,5.89
-2001  ,-23.92    ,1.86   ,26.12    ,3.83   ,17.68    ,3.83
-2002  ,-15.71   ,10.48   ,21.57   ,11.73   ,18.66    ,1.65
-2003   ,41.68   ,16.93   ,20.47  ,-10.62   ,10.06    ,1.02
-2004   ,22.56   ,10.14   ,11.16    ,4.21   ,-0.51    ,1.20
-2005    ,8.82    ,7.17    ,9.44   ,-0.71   ,-0.90    ,2.98
-2006   ,32.20    ,8.09   ,11.07   ,-1.53   ,-3.65    ,4.80
-2007    ,9.69   ,-8.69   ,-0.06    ,8.85    ,4.42    ,4.66
-2008  ,-47.45   ,-5.74   ,-3.29    ,2.72   ,11.41    ,1.60
-2009   ,35.15   ,15.77    ,1.55   ,14.62   ,-9.17    ,0.10
-2010    ,6.31    ,9.57   ,-8.62    ,6.66   ,-3.08    ,0.12
-2011  ,-13.12   ,-6.73  ,-12.89   ,14.20   ,-2.41    ,0.04
-2012   ,20.77    ,2.25    ,1.90    ,2.55    ,1.71    ,0.06
-2013   ,28.00    ,8.77   ,10.35   ,-0.62    ,8.76    ,0.02
-2014   ,-6.34   ,-1.47   ,-5.29    ,5.92   ,-1.52    ,0.02
-2015   ,-0.51   ,10.17  ,-16.75   ,11.70   ,-8.52    ,0.02
-2016   ,-0.04    ,4.92   ,11.08   ,-0.33   ,10.98    ,0.20
-2017   ,28.21    ,6.72    ,3.01    ,2.43   ,-2.49    ,0.80
-2018  ,-16.08   ,-4.29   ,-3.34    ,2.25   ,-2.92    ,1.81
-2019   ,21.81   ,-1.56  ,-11.77    ,6.36   ,-5.14    ,2.14
-2020    ,9.23   ,11.64  ,-30.11    ,5.30  ,-23.75    ,0.44
-2021   ,16.77   ,-1.19    ,4.98    ,9.34   ,-5.10    ,0.04
-2022  ,-18.61   ,-7.46   ,19.15   ,-3.46   ,11.80    ,1.42
-2023   ,13.37   ,-8.20    ,9.13    ,0.28    ,5.71    ,4.95
-2024   ,-4.41   ,-4.48    ,8.36  ,-10.13    ,3.88    ,5.26
-2025   ,30.55   ,-4.57   ,29.57   ,-6.88    ,8.03    ,4.25
 """
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# DATA LOADER – parses embedded strings, keeps only rows with 6-digit numeric index
+# DATA LOADER – FIXED version with explicit numeric conversion
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_data
@@ -1255,15 +1175,27 @@ def load_factor_data_from_strings():
     try:
         ff3 = pd.read_csv(StringIO(EUROPE_3_FACTORS_CSV), skiprows=6, index_col=0)
         ff5 = pd.read_csv(StringIO(EUROPE_5_FACTORS_CSV), skiprows=6, index_col=0)
+        
         for df in [ff3, ff5]:
-            # Keep only rows where index is a 6-digit number (YYYYMM) – this filters out the annual section and blank lines
-            df = df[df.index.str.match(r'^\d{6}$')]
+            # Convert index to string and strip whitespace
+            df.index = df.index.astype(str).str.strip()
+            # Keep only rows where index is a 6-digit number (YYYYMM)
+            df = df[df.index.str.match(r'^\d{6}$', na=False)].copy()
+            # Convert index to datetime
             df.index = pd.to_datetime(df.index, format='%Y%m')
+            # Explicitly convert all columns to numeric
+            for col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Replace missing value marker
             df.replace(-99.99, np.nan, inplace=True)
+            # Convert from percentages to decimals
             df = df / 100
+        
         return ff3, ff5
     except Exception as e:
         st.error(f"Error parsing embedded data: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return None, None
 
 ff3, ff5 = load_factor_data_from_strings()
@@ -1286,7 +1218,7 @@ MACRO_PERIODS = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# REGRESSION FUNCTIONS (unchanged)
+# REGRESSION FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def run_capm(returns, risk_free, market_premium):
@@ -1369,7 +1301,7 @@ def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
     }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR – clean, no disclaimers
+# SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
@@ -1407,7 +1339,6 @@ try:
         st.error("No data available for selected period.")
         st.stop()
     
-    # Use the market factor as the return series
     returns = ff3_period['Mkt-RF']
     returns_display = "European Market (Mkt-RF)"
     
@@ -1464,15 +1395,6 @@ try:
     st.markdown('<div class="sec-label"><span class="dot"></span> Model Comparison</div>',
                 unsafe_allow_html=True)
     
-    comparison_data = {
-        'Metric': ['Alpha (%)', 'Alpha t-stat', 'Alpha p-value', 'R² (Goodness-of-Fit)', 'Model Factors', 'Observations'],
-        'CAPM': [f"{capm_res['alpha']*100:.3f}", f"{capm_res['alpha_t']:.2f}", f"{capm_res['alpha_p']:.4f}", f"{capm_res['r_squared']:.4f}", "1 (Market)", f"{capm_res['n_obs']}"],
-        'FF3': [f"{ff3_res['alpha']*100:.3f}", f"{ff3_res['alpha_t']:.2f}", f"{ff3_res['alpha_p']:.4f}", f"{ff3_res['r_squared']:.4f}", "3 (MKT, SMB, HML)", f"{ff3_res['n_obs']}"],
-        'FF5': [f"{ff5_res['alpha']*100:.3f}", f"{ff5_res['alpha_t']:.2f}", f"{ff5_res['alpha_p']:.4f}", f"{ff5_res['r_squared']:.4f}", "5 (MKT, SMB, HML, RMW, CMA)", f"{ff5_res['n_obs']}"]
-    }
-    comp_df = pd.DataFrame(comparison_data)
-    
-    st.markdown('<div class="panel"><div class="panel-title">// Factor Model Regression Results</div>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"**CAPM**\n- α = {capm_res['alpha']*100:.3f}% (t={capm_res['alpha_t']:.2f})\n- β = {capm_res['beta']:.3f}\n- R² = {capm_res['r_squared']:.4f}\n- n = {capm_res['n_obs']}")
@@ -1480,7 +1402,6 @@ try:
         st.markdown(f"**Fama-French 3**\n- α = {ff3_res['alpha']*100:.3f}% (t={ff3_res['alpha_t']:.2f})\n- MKT β = {ff3_res['mkt']:.3f}\n- SMB β = {ff3_res['smb']:.3f}\n- HML β = {ff3_res['hml']:.3f}\n- R² = {ff3_res['r_squared']:.4f}")
     with col3:
         st.markdown(f"**Fama-French 5**\n- α = {ff5_res['alpha']*100:.3f}% (t={ff5_res['alpha_t']:.2f})\n- MKT β = {ff5_res['mkt']:.3f}\n- SMB β = {ff5_res['smb']:.3f}\n- HML β = {ff5_res['hml']:.3f}\n- RMW β = {ff5_res['rmw']:.3f}\n- CMA β = {ff5_res['cma']:.3f}\n- R² = {ff5_res['r_squared']:.4f}")
-    st.markdown('</div>', unsafe_allow_html=True)
     
     # ─── RANKING ──────────────────────────────────────────────────────────────
     st.markdown('<div class="sec-label"><span class="dot"></span> Model Effectiveness Ranking</div>', unsafe_allow_html=True)
@@ -1513,9 +1434,6 @@ try:
         st.markdown(f"### 🎯 Best Performer\n**{best_model}** dominates with R² = {best_r2:.4f}\n\n- Explains {best_r2*100:.1f}% of return variation\n- {'Alpha is statistically significant' if alpha_sig[best_model] else 'Alpha is not statistically significant'}\n- **Recommendation:** Use {best_model} for this period")
     with col2:
         st.markdown(f"### 📊 Factor Effectiveness\n- **FF3 → CAPM:** +{improvement_3_to_capm:.1f}% improvement\n- **FF5 → FF3:** {improvement_5_to_3:+.1f}% change\n\n{f'SMB/HML factors substantially improve explanatory power' if improvement_3_to_capm > 5 else 'SMB/HML offer modest marginal benefit'}\n\n{f'RMW/CMA factors add value' if improvement_5_to_3 > 0 else 'RMW/CMA provide diminishing returns'}")
-    
-    st.markdown('<div class="sec-label"><span class="dot"></span> Detailed Metrics</div>', unsafe_allow_html=True)
-    st.dataframe(comp_df.style.format({'CAPM': '{}', 'FF3': '{}', 'FF5': '{}'}), use_container_width=True)
     
     # ─── EXPORT ──────────────────────────────────────────────────────────────
     st.markdown('<div class="sec-label"><span class="dot"></span> Export Results</div>', unsafe_allow_html=True)
