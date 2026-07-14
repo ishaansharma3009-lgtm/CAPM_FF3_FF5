@@ -1170,27 +1170,33 @@ Missing data are indicated by -99.99.
 # DATA LOADER – FIXED version with explicit numeric conversion
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _clean_factor_df(df):
+    """Clean a raw parsed factor dataframe: filter to monthly rows, fix dtypes, rescale."""
+    # Convert index to string and strip whitespace
+    df = df.copy()
+    df.index = df.index.astype(str).str.strip()
+    # Keep only rows where index is a 6-digit number (YYYYMM) - filters out annual section/blank lines
+    df = df[df.index.str.match(r'^\d{6}$', na=False)].copy()
+    # Convert index to datetime
+    df.index = pd.to_datetime(df.index, format='%Y%m')
+    # Explicitly convert all columns to numeric (source columns can parse as strings/object)
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    # Replace missing value marker
+    df.replace(-99.99, np.nan, inplace=True)
+    # Convert from percentages to decimals
+    df = df / 100
+    return df
+
 @st.cache_data
 def load_factor_data_from_strings():
     try:
-        ff3 = pd.read_csv(StringIO(EUROPE_3_FACTORS_CSV), skiprows=6, index_col=0)
-        ff5 = pd.read_csv(StringIO(EUROPE_5_FACTORS_CSV), skiprows=6, index_col=0)
-        
-        for df in [ff3, ff5]:
-            # Convert index to string and strip whitespace
-            df.index = df.index.astype(str).str.strip()
-            # Keep only rows where index is a 6-digit number (YYYYMM)
-            df = df[df.index.str.match(r'^\d{6}$', na=False)].copy()
-            # Convert index to datetime
-            df.index = pd.to_datetime(df.index, format='%Y%m')
-            # Explicitly convert all columns to numeric
-            for col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-            # Replace missing value marker
-            df.replace(-99.99, np.nan, inplace=True)
-            # Convert from percentages to decimals
-            df = df / 100
-        
+        ff3_raw = pd.read_csv(StringIO(EUROPE_3_FACTORS_CSV), skiprows=6, index_col=0)
+        ff5_raw = pd.read_csv(StringIO(EUROPE_5_FACTORS_CSV), skiprows=6, index_col=0)
+
+        ff3 = _clean_factor_df(ff3_raw)
+        ff5 = _clean_factor_df(ff5_raw)
+
         return ff3, ff5
     except Exception as e:
         st.error(f"Error parsing embedded data: {e}")
@@ -1268,7 +1274,8 @@ def run_ff3(returns, risk_free, market_premium, smb, hml):
     p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), n - 4))
     return {
         'alpha': beta[0], 'mkt': beta[1], 'smb': beta[2], 'hml': beta[3],
-        'r_squared': r_squared, 'alpha_se': std_errors[0], 'alpha_p': p_values[0],
+        'r_squared': r_squared, 'alpha_se': std_errors[0],
+        'alpha_t': t_stats[0], 'alpha_p': p_values[0],
         'n_obs': n
     }
 
@@ -1296,7 +1303,8 @@ def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
     return {
         'alpha': beta[0], 'mkt': beta[1], 'smb': beta[2], 'hml': beta[3],
         'rmw': beta[4], 'cma': beta[5],
-        'r_squared': r_squared, 'alpha_se': std_errors[0], 'alpha_p': p_values[0],
+        'r_squared': r_squared, 'alpha_se': std_errors[0],
+        'alpha_t': t_stats[0], 'alpha_p': p_values[0],
         'n_obs': n
     }
 
