@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore')
 st.set_page_config(
     page_title="Factor Model Analyzer",
     layout="wide",
-    page_icon="⚙️",
+    page_icon="FM",
     initial_sidebar_state="expanded"
 )
 
@@ -24,18 +24,19 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
 
     :root {
-        --bg:        #08090d;
-        --surface:   #0f1117;
-        --surface2:  #161820;
-        --border:    #1e2030;
-        --border2:   #2a2d42;
-        --accent:    #4fffb0;
-        --accent2:   #00c9ff;
-        --warn:      #ff6b6b;
-        --success:   #4fffb0;
-        --muted:     #4a4f6a;
-        --text:      #e8eaf0;
-        --text2:     #8b90ab;
+        --bg:        #ffffff;
+        --surface:   #fafbfa;
+        --surface2:  #f0f2f0;
+        --border:    #e2e5e2;
+        --border2:   #cfd3cf;
+        --accent:      #2e8b57;
+        --accent-dark: #23663f;
+        --accent2:     #3f9d6c;
+        --warn:      #b23a2e;
+        --success:   #2e8b57;
+        --muted:     #6b716b;
+        --text:      #111111;
+        --text2:     #555a55;
         --font-head: 'Space Grotesk', 'Trebuchet MS', sans-serif;
         --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
     }
@@ -128,9 +129,9 @@ st.markdown("""
 
     .badge {
         margin-left: auto;
-        background: rgba(79,255,176,0.07);
-        border: 1px solid rgba(79,255,176,0.25);
-        color: var(--accent);
+        background: rgba(46,139,87,0.08);
+        border: 1px solid rgba(46,139,87,0.30);
+        color: var(--accent-dark);
         font-size: 0.6rem;
         letter-spacing: 0.12em;
         text-transform: uppercase;
@@ -195,7 +196,7 @@ st.markdown("""
         font-family: var(--font-head);
         font-size: 1.6rem;
         font-weight: 700;
-        color: var(--accent);
+        color: var(--text);
         line-height: 1;
     }
 
@@ -232,9 +233,9 @@ st.markdown("""
         letter-spacing: 0.08em;
     }
 
-    .rank-1 { background: rgba(79,255,176,0.15); color: var(--accent); }
-    .rank-2 { background: rgba(0,201,255,0.15); color: var(--accent2); }
-    .rank-3 { background: rgba(255,107,107,0.15); color: var(--warn); }
+    .rank-1 { background: rgba(46,139,87,0.14); color: var(--accent-dark); }
+    .rank-2 { background: rgba(63,157,108,0.14); color: var(--accent2); }
+    .rank-3 { background: rgba(178,58,46,0.12); color: var(--warn); }
 
     table {
         width: 100%;
@@ -263,10 +264,10 @@ st.markdown("""
         color: var(--text);
     }
 
-    table tbody tr:hover { background: rgba(79,255,176,0.03); }
+    table tbody tr:hover { background: rgba(46,139,87,0.04); }
 
     .metric-highlight {
-        color: var(--accent);
+        color: var(--accent-dark);
         font-weight: 600;
     }
 
@@ -1211,18 +1212,38 @@ if ff3 is None or ff5 is None:
     st.stop()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MACRO PERIODS
+# REGIME WINDOWS (single source of truth - drives both the single-asset section
+# and the 25-portfolio section, so changing the sidebar selector affects both)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MACRO_PERIODS = {
-    "Full Period (1990-2024)": (datetime(1990, 1, 1), datetime(2024, 12, 31)),
-    "Pre-GFC (1990-2007)": (datetime(1990, 1, 1), datetime(2007, 12, 31)),
-    "GFC Crisis (2008-2009)": (datetime(2008, 1, 1), datetime(2009, 12, 31)),
-    "Post-GFC Recovery (2010-2012)": (datetime(2010, 1, 1), datetime(2012, 12, 31)),
-    "ECB Stabilization (2013-2019)": (datetime(2013, 1, 1), datetime(2019, 12, 31)),
-    "COVID Pandemic (2020-2021)": (datetime(2020, 1, 1), datetime(2021, 12, 31)),
-    "Post-COVID (2022-2024)": (datetime(2022, 1, 1), datetime(2024, 12, 31)),
+REGIME_WINDOWS = {
+    "Regime 1: Sovereign Debt Crisis (2010-2012)": (datetime(2010, 1, 1), datetime(2012, 12, 31)),
+    "Regime 2: QE / Recovery Era (2013-2019)": (datetime(2013, 1, 1), datetime(2019, 12, 31)),
+    "Regime 3: COVID & Rate-Hike Cycle (2020-2024)": (datetime(2020, 1, 1), datetime(2024, 12, 31)),
 }
+
+REGIME_BLURBS = {
+    "Regime 1: Sovereign Debt Crisis (2010-2012)": (
+        "Dominated by widening Greek, Italian, and Spanish sovereign spreads, repeated ECB "
+        "liquidity interventions, and cross-country contagion risk. Only 36 monthly "
+        "observations - expect noisier, lower-fit estimates across all three models."
+    ),
+    "Regime 2: QE / Recovery Era (2013-2019)": (
+        "Post-'whatever it takes' structural break: negative ECB rates from 2014 and full "
+        "quantitative easing from 2015 produced a calmer, policy-supported market. Loadings "
+        "and fit are expected to look structurally different from Regime 1."
+    ),
+    "Regime 3: COVID & Rate-Hike Cycle (2020-2024)": (
+        "Spans the COVID shock and the subsequent 2022+ ECB rate-hiking cycle - a higher-rate, "
+        "higher-volatility environment than Regime 2, and a different kind of stress than "
+        "Regime 1's sovereign-contagion shock."
+    ),
+}
+
+# MACRO_PERIODS is an alias of REGIME_WINDOWS: the single-asset comparison and the
+# 25-portfolio GRS section now read from the exact same 3 regime definitions, so
+# picking a regime in the sidebar actually changes both sections' results.
+MACRO_PERIODS = REGIME_WINDOWS
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # REGRESSION FUNCTIONS
@@ -1310,33 +1331,8 @@ def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
     }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# NEW: NEWEY-WEST HAC OLS + GRS TEST + 25-PORTFOLIO CROSS-SECTIONAL ANALYSIS
-# (Additive block - does not modify any function or variable used above)
+# NEWEY-WEST HAC OLS + GRS TEST + 25-PORTFOLIO CROSS-SECTIONAL ANALYSIS
 # ═══════════════════════════════════════════════════════════════════════════════
-
-REGIME_WINDOWS = {
-    "Regime 1: Sovereign Debt Crisis (2010-2012)": (datetime(2010, 1, 1), datetime(2012, 12, 31)),
-    "Regime 2: QE / Recovery Era (2013-2019)": (datetime(2013, 1, 1), datetime(2019, 12, 31)),
-    "Regime 3: COVID & Rate-Hike Cycle (2020-2024)": (datetime(2020, 1, 1), datetime(2024, 12, 31)),
-}
-
-REGIME_BLURBS = {
-    "Regime 1: Sovereign Debt Crisis (2010-2012)": (
-        "Dominated by widening Greek, Italian, and Spanish sovereign spreads, repeated ECB "
-        "liquidity interventions, and cross-country contagion risk. Only 36 monthly "
-        "observations - expect noisier, lower-fit estimates across all three models."
-    ),
-    "Regime 2: QE / Recovery Era (2013-2019)": (
-        "Post-'whatever it takes' structural break: negative ECB rates from 2014 and full "
-        "quantitative easing from 2015 produced a calmer, policy-supported market. Loadings "
-        "and fit are expected to look structurally different from Regime 1."
-    ),
-    "Regime 3: COVID & Rate-Hike Cycle (2020-2024)": (
-        "Spans the COVID shock and the subsequent 2022+ ECB rate-hiking cycle - a higher-rate, "
-        "higher-volatility environment than Regime 2, and a different kind of stress than "
-        "Regime 1's sovereign-contagion shock."
-    ),
-}
 
 
 def newey_west_ols(X, y, lags=None):
@@ -1509,16 +1505,16 @@ def generate_demo_portfolios(factor_df, n=25, seed=42):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    st.markdown("### 📊 Configuration")
-    st.markdown("**Macro Period**")
+    st.markdown("### Configuration")
+    st.markdown("**Regime**")
     selected_period = st.selectbox("", list(MACRO_PERIODS.keys()), label_visibility="collapsed")
     period_start, period_end = MACRO_PERIODS[selected_period]
     st.divider()
-    st.markdown("**⚙️ Advanced**")
+    st.markdown("**Advanced**")
     risk_free_override = st.number_input("Risk-Free Rate (% annual)", 0.0, 10.0, 2.5, 0.1) / 100
 
     st.divider()
-    st.markdown("### 🧮 25-Portfolio GRS Test")
+    st.markdown("### 25-Portfolio GRS Test")
     st.markdown(
         "Paste the **Europe 25 Portfolios Formed on Size and Book-to-Market "
         "(5x5, local currency, monthly)** file from the Kenneth French Data "
@@ -1548,7 +1544,7 @@ st.markdown("""
         <div class="logo">FACTOR <span>MODEL</span> ANALYZER</div>
         <div class="subtitle">CAPM vs FF3 vs FF5 Comparison</div>
     </div>
-    <div class="badge">📈 Analysis Ready</div>
+    <div class="badge">Analysis Ready</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1639,9 +1635,9 @@ try:
         rank_class = f"rank-{idx}"
         badge = f'<span class="rank-badge {rank_class}">#{idx}</span>'
         improvement = "-" if idx == 1 else f"{(r2 - ranked[0][1]) / ranked[0][1] * 100:+.1f}%"
-        is_sig = "✓ Yes" if alpha_sig[model] else "✗ No"
+        is_sig = "Yes" if alpha_sig[model] else "No"
         sig_class = "metric-highlight" if alpha_sig[model] else ""
-        verdict = "🏆 Best Model" if idx == 1 else ("🥈 Strong" if idx == 2 else "⚠️ Limited")
+        verdict = "Best Model" if idx == 1 else ("Strong" if idx == 2 else "Limited")
         verdict_class = "metric-highlight" if idx <= 2 else "metric-warn"
         ranking_html += f'<tr><td>{badge}</td><td><strong>{model}</strong></td><td><span class="metric-highlight">{r2:.4f}</span></td><td>{improvement}</td><td><span class="{sig_class}">{is_sig}</span></td><td><span class="{verdict_class}">{verdict}</span></td></tr>'
     ranking_html += '</tbody></table></div>'
@@ -1656,9 +1652,9 @@ try:
     
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown(f"### 🎯 Best Performer\n**{best_model}** dominates with R² = {best_r2:.4f}\n\n- Explains {best_r2*100:.1f}% of return variation\n- {'Alpha is statistically significant' if alpha_sig[best_model] else 'Alpha is not statistically significant'}\n- **Recommendation:** Use {best_model} for this period")
+        st.markdown(f"### Best Performer\n**{best_model}** dominates with R² = {best_r2:.4f}\n\n- Explains {best_r2*100:.1f}% of return variation\n- {'Alpha is statistically significant' if alpha_sig[best_model] else 'Alpha is not statistically significant'}\n- **Recommendation:** Use {best_model} for this period")
     with col2:
-        st.markdown(f"### 📊 Factor Effectiveness\n- **FF3 → CAPM:** +{improvement_3_to_capm:.1f}% improvement\n- **FF5 → FF3:** {improvement_5_to_3:+.1f}% change\n\n{f'SMB/HML factors substantially improve explanatory power' if improvement_3_to_capm > 5 else 'SMB/HML offer modest marginal benefit'}\n\n{f'RMW/CMA factors add value' if improvement_5_to_3 > 0 else 'RMW/CMA provide diminishing returns'}")
+        st.markdown(f"### Factor Effectiveness\n- **FF3 → CAPM:** +{improvement_3_to_capm:.1f}% improvement\n- **FF5 → FF3:** {improvement_5_to_3:+.1f}% change\n\n{f'SMB/HML factors substantially improve explanatory power' if improvement_3_to_capm > 5 else 'SMB/HML offer modest marginal benefit'}\n\n{f'RMW/CMA factors add value' if improvement_5_to_3 > 0 else 'RMW/CMA provide diminishing returns'}")
     
     # ─── EXPORT ──────────────────────────────────────────────────────────────
     st.markdown('<div class="sec-label"><span class="dot"></span> Export Results</div>', unsafe_allow_html=True)
@@ -1674,7 +1670,7 @@ try:
     }
     export_df = pd.DataFrame(export_data)
     csv = export_df.to_csv(index=False)
-    st.download_button("📥 Download Results (CSV)", csv.encode(), "factor_model_comparison.csv", "text/csv")
+    st.download_button("Download Results (CSV)", csv.encode(), "factor_model_comparison.csv", "text/csv")
 
 except Exception as e:
     st.error(f"Analysis Error: {e}")
@@ -1729,8 +1725,8 @@ try:
     else:
         if is_demo:
             st.markdown("""
-            <div class="panel" style="border-color: rgba(255,107,107,0.4);">
-            <span class="metric-warn">⚠ SYNTHETIC DEMO DATA</span> — these 25 portfolios are
+            <div class="panel" style="border-color: rgba(178,58,46,0.4);">
+            <span class="metric-warn">SYNTHETIC DEMO DATA</span> — these 25 portfolios are
             randomly generated placeholders for previewing the layout only. Replace with the
             real Kenneth French Europe 25 Size/B-M file before using any of these numbers.
             </div>
@@ -1806,32 +1802,33 @@ try:
         adj_r2_df = pd.DataFrame(adj_r2_rows).set_index('Regime')
         st.bar_chart(adj_r2_df)
 
-        # ── Alpha heatmap (5x5) for a selected model/regime ─────────────────
-        st.markdown('<div class="sec-label"><span class="dot"></span> Alpha Heatmap (5×5 Size/B-M Grid)</div>',
+        # ── Alpha heatmap (5x5): CAPM / FF3 / FF5 shown side by side for the ──
+        # ── regime picked in the sidebar - so switching that selector visibly ──
+        # ── changes what's shown here too, not just in the section above. ──
+        st.markdown('<div class="sec-label"><span class="dot"></span> Alpha Heatmap - Model Comparison</div>',
                     unsafe_allow_html=True)
-        hcol1, hcol2 = st.columns(2)
-        with hcol1:
-            heatmap_regime = st.selectbox("Regime", list(REGIME_WINDOWS.keys()), key="heatmap_regime")
-        with hcol2:
-            heatmap_model = st.selectbox("Model", list(model_specs.keys()), key="heatmap_model")
+        st.markdown(f'<p style="color:var(--text2); font-size:0.78rem;">Showing all three models side by side '
+                    f'for the regime selected in the sidebar: <strong>{selected_period}</strong></p>',
+                    unsafe_allow_html=True)
 
-        hblock = regime_results[heatmap_regime][heatmap_model]
-        if hblock is None:
-            st.info("No result available for this regime/model combination (insufficient overlapping data).")
-        elif hblock['N'] != 25:
-            st.info(f"Heatmap needs exactly 25 portfolios to form a 5×5 grid — found {hblock['N']}. "
-                    "Table view of all portfolio alphas is shown instead.")
-            alpha_table = pd.DataFrame({
-                'Portfolio': hblock['columns'],
-                'Alpha (%)': hblock['alphas'] * 100,
-                't-stat': hblock['t'],
-            })
-            st.dataframe(alpha_table, use_container_width=True)
-        else:
-            alphas_grid = (hblock['alphas'] * 100).reshape(5, 5)
-            t_grid = hblock['t'].reshape(5, 5)
+        def _render_alpha_grid(block, model_name):
+            if block is None:
+                st.info(f"{model_name}: insufficient overlapping data for this regime.")
+                return
+            if block['N'] != 25:
+                st.info(f"{model_name}: needs 25 portfolios for a 5×5 grid, found {block['N']}.")
+                alpha_table = pd.DataFrame({
+                    'Portfolio': block['columns'],
+                    'Alpha (%)': block['alphas'] * 100,
+                    't-stat': block['t'],
+                })
+                st.dataframe(alpha_table, use_container_width=True)
+                return
+            alphas_grid = (block['alphas'] * 100).reshape(5, 5)
+            t_grid = block['t'].reshape(5, 5)
             max_abs = max(np.abs(alphas_grid).max(), 1e-6)
-            grid_html = '<div class="panel"><div class="panel-title">// Alpha (%) by Size (rows) × B/M (cols), grid follows your file\'s column order</div>'
+            grid_html = (f'<div class="panel"><div class="panel-title">{model_name} '
+                         f'(Adj. R\u00b2 = {block["mean_adj_r2"]:.3f}, GRS p = {block["GRS_p"]:.4f})</div>')
             grid_html += '<table><tbody>'
             for r in range(5):
                 grid_html += '<tr>'
@@ -1839,15 +1836,26 @@ try:
                     a = alphas_grid[r, c]
                     t = t_grid[r, c]
                     intensity = min(abs(a) / max_abs, 1.0)
-                    color = f'rgba(255,107,107,{0.10 + 0.35*intensity})' if abs(t) > 1.96 else f'rgba(79,255,176,{0.08 + 0.25*intensity})'
-                    grid_html += (f'<td style="background:{color}; text-align:center; padding:0.8rem;">'
-                                  f'<div style="font-weight:600;">{a:+.2f}%</div>'
-                                  f'<div style="font-size:0.65rem; color:var(--text2);">t={t:.2f}</div></td>')
+                    color = (f'rgba(178,58,46,{0.08 + 0.30*intensity})' if abs(t) > 1.96
+                             else f'rgba(46,139,87,{0.06 + 0.22*intensity})')
+                    grid_html += (f'<td style="background:{color}; text-align:center; padding:0.6rem 0.4rem;">'
+                                  f'<div style="font-weight:600; font-size:0.8rem;">{a:+.2f}%</div>'
+                                  f'<div style="font-size:0.6rem; color:var(--text2);">t={t:.2f}</div></td>')
                 grid_html += '</tr>'
             grid_html += '</tbody></table></div>'
             st.markdown(grid_html, unsafe_allow_html=True)
-            st.markdown('<p style="color:var(--muted); font-size:0.7rem;">Red = |t-stat| > 1.96 (individually significant alpha). Darker shade = larger magnitude.</p>',
-                        unsafe_allow_html=True)
+
+        hm_col1, hm_col2, hm_col3 = st.columns(3)
+        with hm_col1:
+            _render_alpha_grid(regime_results[selected_period]['CAPM'], 'CAPM')
+        with hm_col2:
+            _render_alpha_grid(regime_results[selected_period]['FF3'], 'FF3')
+        with hm_col3:
+            _render_alpha_grid(regime_results[selected_period]['FF5'], 'FF5')
+
+        st.markdown('<p style="color:var(--muted); font-size:0.7rem;">Red = |t-stat| > 1.96 (individually '
+                    'significant alpha). Darker shade = larger magnitude. Grid follows your file\'s column order '
+                    '(Size rows × B/M columns).</p>', unsafe_allow_html=True)
 
         # ── Rolling 36-month market beta (equal-weighted across all portfolios) ──
         st.markdown('<div class="sec-label"><span class="dot"></span> Rolling 36-Month Market Beta (Equal-Weighted Portfolio Average)</div>',
