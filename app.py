@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re
 import warnings
 from datetime import datetime
 from scipy import stats
@@ -1309,6 +1310,201 @@ def run_ff5(returns, risk_free, market_premium, smb, hml, rmw, cma):
     }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# NEW: NEWEY-WEST HAC OLS + GRS TEST + 25-PORTFOLIO CROSS-SECTIONAL ANALYSIS
+# (Additive block - does not modify any function or variable used above)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+REGIME_WINDOWS = {
+    "Regime 1: Sovereign Debt Crisis (2010-2012)": (datetime(2010, 1, 1), datetime(2012, 12, 31)),
+    "Regime 2: QE / Recovery Era (2013-2019)": (datetime(2013, 1, 1), datetime(2019, 12, 31)),
+    "Regime 3: COVID & Rate-Hike Cycle (2020-2024)": (datetime(2020, 1, 1), datetime(2024, 12, 31)),
+}
+
+REGIME_BLURBS = {
+    "Regime 1: Sovereign Debt Crisis (2010-2012)": (
+        "Dominated by widening Greek, Italian, and Spanish sovereign spreads, repeated ECB "
+        "liquidity interventions, and cross-country contagion risk. Only 36 monthly "
+        "observations - expect noisier, lower-fit estimates across all three models."
+    ),
+    "Regime 2: QE / Recovery Era (2013-2019)": (
+        "Post-'whatever it takes' structural break: negative ECB rates from 2014 and full "
+        "quantitative easing from 2015 produced a calmer, policy-supported market. Loadings "
+        "and fit are expected to look structurally different from Regime 1."
+    ),
+    "Regime 3: COVID & Rate-Hike Cycle (2020-2024)": (
+        "Spans the COVID shock and the subsequent 2022+ ECB rate-hiking cycle - a higher-rate, "
+        "higher-volatility environment than Regime 2, and a different kind of stress than "
+        "Regime 1's sovereign-contagion shock."
+    ),
+}
+
+
+def newey_west_ols(X, y, lags=None):
+    """OLS with Newey-West (1987) HAC standard errors (Bartlett kernel)."""
+    n, k = X.shape
+    XtX = X.T @ X
+    XtX_inv = np.linalg.inv(XtX)
+    beta = XtX_inv @ X.T @ y
+    resid = y - X @ beta
+
+    if lags is None:
+        lags = int(np.floor(4 * (n / 100) ** (2 / 9)))
+    lags = max(int(lags), 0)
+
+    u = X * resid[:, None]  # n x k score contributions
+    S = (u.T @ u) / n
+    for l in range(1, lags + 1):
+        w = 1.0 - l / (lags + 1)
+        gamma_l = (u[l:].T @ u[:-l]) / n
+        S += w * (gamma_l + gamma_l.T)
+
+    Q_inv = XtX_inv * n  # (X'X/n)^-1
+    var_beta = (Q_inv @ S @ Q_inv) / n
+    se = np.sqrt(np.clip(np.diag(var_beta), 0, None))
+    t_stats = np.divide(beta, se, out=np.zeros_like(beta), where=se != 0)
+    df_resid = max(n - k, 1)
+    p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), df_resid))
+
+    rss = np.sum(resid ** 2)
+    tss = np.sum((y - y.mean()) ** 2)
+    r2 = 1 - rss / tss if tss != 0 else np.nan
+    adj_r2 = 1 - (1 - r2) * (n - 1) / max(n - k, 1) if not np.isnan(r2) else np.nan
+
+    return {'beta': beta, 'se': se, 't': t_stats, 'p': p_values,
+            'r2': r2, 'adj_r2': adj_r2, 'resid': resid, 'n': n, 'k': k}
+
+
+def grs_test(alphas, resid_cov, factor_means, factor_cov, T, N, K):
+    """Gibbons, Ross & Shanken (1989) joint test that all N alphas are zero."""
+    a = alphas.reshape(-1, 1)
+    sigma_inv = np.linalg.inv(resid_cov)
+    quad_alpha = (a.T @ sigma_inv @ a).item()
+
+    f = factor_means.reshape(-1, 1)
+    omega_inv = np.linalg.inv(factor_cov)
+    quad_f = (f.T @ omega_inv @ f).item()
+
+    dof2 = T - N - K
+    if dof2 <= 0:
+        return np.nan, np.nan
+    grs_stat = ((T - N - K) / N) * (quad_alpha / (1 + quad_f))
+    p_value = 1 - stats.f.cdf(grs_stat, N, dof2)
+    return grs_stat, p_value
+
+
+def run_multi_portfolio_regression(portfolio_returns, rf, factor_matrix):
+    """
+    Runs a CAPM/FF3/FF5-style regression separately for every column (portfolio)
+    in portfolio_returns against the same factor_matrix, using Newey-West HAC SEs,
+    then computes the GRS joint test across all portfolios.
+    """
+    common_idx = portfolio_returns.index.intersection(rf.index).intersection(factor_matrix.index)
+    if len(common_idx) < factor_matrix.shape[1] + 3:
+        return None
+
+    Y = portfolio_returns.loc[common_idx].sub(rf.loc[common_idx], axis=0).values
+    X_factors = factor_matrix.loc[common_idx].values
+    T, N = Y.shape
+    K = X_factors.shape[1]
+    X = np.column_stack([np.ones(T), X_factors])
+
+    alphas = np.zeros(N)
+    ses = np.zeros(N)
+    tstats = np.zeros(N)
+    pvals = np.zeros(N)
+    r2s = np.zeros(N)
+    adj_r2s = np.zeros(N)
+    resid_matrix = np.zeros((T, N))
+
+    for i in range(N):
+        res = newey_west_ols(X, Y[:, i])
+        alphas[i] = res['beta'][0]
+        ses[i] = res['se'][0]
+        tstats[i] = res['t'][0]
+        pvals[i] = res['p'][0]
+        r2s[i] = res['r2']
+        adj_r2s[i] = res['adj_r2']
+        resid_matrix[:, i] = res['resid']
+
+    dof_resid = max(T - K - 1, 1)
+    resid_cov = (resid_matrix.T @ resid_matrix) / dof_resid
+    factor_means = X_factors.mean(axis=0)
+    factor_cov = np.atleast_2d(np.cov(X_factors, rowvar=False, ddof=1))
+    grs_stat, grs_p = grs_test(alphas, resid_cov, factor_means, factor_cov, T, N, K)
+
+    return {
+        'alphas': alphas, 'ses': ses, 't': tstats, 'p': pvals,
+        'r2': r2s, 'adj_r2': adj_r2s,
+        'avg_abs_alpha': float(np.mean(np.abs(alphas))),
+        'mean_adj_r2': float(np.mean(adj_r2s)),
+        'GRS': grs_stat, 'GRS_p': grs_p,
+        'N': N, 'T': T, 'K': K,
+        'columns': list(portfolio_returns.columns),
+    }
+
+
+def parse_pasted_portfolio_csv(text):
+    """Flexible parser for a pasted Kenneth-French-style portfolio CSV. Auto-detects
+    where the monthly (YYYYMM) data actually starts, unlike the fixed skiprows used
+    for the embedded factor files, since pasted content won't have a known offset."""
+    if not text or not text.strip():
+        return None, "No data pasted yet."
+
+    lines = text.splitlines()
+    data_start = None
+    for i, line in enumerate(lines):
+        if re.match(r'^\s*\d{6}\s*,', line):
+            data_start = i
+            break
+    if data_start is None:
+        return None, "Couldn't find any monthly (YYYYMM) rows in the pasted text."
+
+    header_idx = data_start - 1
+    while header_idx >= 0 and not lines[header_idx].strip():
+        header_idx -= 1
+    if header_idx < 0:
+        return None, "Couldn't locate a header row above the data."
+
+    csv_text = "\n".join([lines[header_idx]] + lines[data_start:])
+    try:
+        df = pd.read_csv(StringIO(csv_text), index_col=0)
+    except Exception as e:
+        return None, f"Parsing error: {e}"
+
+    df.index = df.index.astype(str).str.strip()
+    df = df[df.index.str.match(r'^\d{6}$', na=False)].copy()
+    if df.empty:
+        return None, "No valid monthly rows survived parsing."
+    df.index = pd.to_datetime(df.index, format='%Y%m')
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    df = df / 100
+
+    if df.shape[1] < 2:
+        return None, "Only found 1 usable data column - check the pasted format."
+    return df, None
+
+
+def generate_demo_portfolios(factor_df, n=25, seed=42):
+    """SYNTHETIC placeholder portfolios (linear factor combos + noise) so the GRS/heatmap
+    UI can be previewed before the real French-library file is pasted in. Not real data."""
+    rng = np.random.default_rng(seed)
+    idx = factor_df.index
+    T = len(idx)
+    mkt = factor_df['Mkt-RF'].values
+    smb = factor_df['SMB'].values
+    hml = factor_df['HML'].values
+    data = {}
+    for j in range(n):
+        b = 0.6 + 0.8 * rng.random()
+        s = -0.5 + rng.random()
+        h = -0.5 + rng.random()
+        noise = rng.normal(0, 0.02, size=T)
+        data[f"Demo_{j + 1:02d}"] = b * mkt + s * smb + h * hml + noise
+    return pd.DataFrame(data, index=idx)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1320,6 +1516,27 @@ with st.sidebar:
     st.divider()
     st.markdown("**⚙️ Advanced**")
     risk_free_override = st.number_input("Risk-Free Rate (% annual)", 0.0, 10.0, 2.5, 0.1) / 100
+
+    st.divider()
+    st.markdown("### 🧮 25-Portfolio GRS Test")
+    st.markdown(
+        "Paste the **Europe 25 Portfolios Formed on Size and Book-to-Market "
+        "(5x5, local currency, monthly)** file from the Kenneth French Data "
+        "Library below to run the cross-sectional GRS analysis across the "
+        "three regime windows (2010-12, 2013-19, 2020-24)."
+    )
+    use_demo_portfolios = st.checkbox(
+        "Use synthetic demo data instead", value=False,
+        help="Generates random placeholder portfolios so you can preview the "
+             "GRS/heatmap layout before you have the real French-library file. "
+             "NOT real data - do not use these numbers in the dissertation."
+    )
+    pasted_portfolio_csv = st.text_area(
+        "Paste 25-portfolio CSV here",
+        height=100,
+        placeholder="Paste the raw file content, headers and all...",
+        disabled=use_demo_portfolios
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HEADER
@@ -1462,5 +1679,205 @@ try:
 except Exception as e:
     st.error(f"Analysis Error: {e}")
     with st.expander("Debug Info"):
+        import traceback
+        st.code(traceback.format_exc())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEW SECTION: 25-PORTFOLIO CROSS-SECTIONAL GRS ANALYSIS
+# Fully isolated in its own try/except so a problem here can never break the
+# single-asset CAPM/FF3/FF5 comparison section above.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+try:
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="sec-label"><span class="dot"></span> 25-Portfolio Cross-Sectional Analysis (GRS Test)</div>',
+                unsafe_allow_html=True)
+
+    # ── Resolve portfolio data source ──────────────────────────────────────
+    portfolio_df = None
+    is_demo = False
+    parse_err = None
+
+    if use_demo_portfolios:
+        portfolio_df = generate_demo_portfolios(ff5)
+        is_demo = True
+    elif pasted_portfolio_csv and pasted_portfolio_csv.strip():
+        portfolio_df, parse_err = parse_pasted_portfolio_csv(pasted_portfolio_csv)
+
+    if portfolio_df is None:
+        st.markdown("""
+        <div class="panel">
+        <div class="panel-title">// Portfolio Data Required</div>
+        <p style="color:var(--text2); font-size:0.85rem; line-height:1.6;">
+        This section tests all 25 European Size/Book-to-Market portfolios jointly
+        (Gibbons-Ross-Shanken test), matching the dissertation methodology. To run it:<br><br>
+        1. Go to the Kenneth French Data Library's <strong>"Developed Markets Factors
+        and Returns"</strong> section.<br>
+        2. Download <strong>"Europe 25 Portfolios Formed on Size and Book-to-Market
+        (5x5, local currency, monthly)"</strong>.<br>
+        3. Paste the raw file content into the <strong>"25-Portfolio GRS Test"</strong>
+        box in the sidebar.<br><br>
+        Or tick <strong>"Use synthetic demo data"</strong> in the sidebar to preview
+        this section's layout with randomly generated placeholder portfolios
+        (clearly not real data).
+        </p>
+        </div>
+        """, unsafe_allow_html=True)
+        if parse_err:
+            st.warning(f"Couldn't use the pasted data: {parse_err}")
+    else:
+        if is_demo:
+            st.markdown("""
+            <div class="panel" style="border-color: rgba(255,107,107,0.4);">
+            <span class="metric-warn">⚠ SYNTHETIC DEMO DATA</span> — these 25 portfolios are
+            randomly generated placeholders for previewing the layout only. Replace with the
+            real Kenneth French Europe 25 Size/B-M file before using any of these numbers.
+            </div>
+            """, unsafe_allow_html=True)
+
+        model_specs = {
+            'CAPM': ['Mkt-RF'],
+            'FF3': ['Mkt-RF', 'SMB', 'HML'],
+            'FF5': ['Mkt-RF', 'SMB', 'HML', 'RMW', 'CMA'],
+        }
+        rf_full = ff3['RF']
+
+        regime_results = {}
+        for regime_name, (r_start, r_end) in REGIME_WINDOWS.items():
+            ff5_slice = ff5[(ff5.index >= r_start) & (ff5.index <= r_end)]
+            port_slice = portfolio_df[(portfolio_df.index >= r_start) & (portfolio_df.index <= r_end)]
+            rf_slice = rf_full[(rf_full.index >= r_start) & (rf_full.index <= r_end)]
+            regime_results[regime_name] = {}
+            for model_name, cols in model_specs.items():
+                available_cols = [c for c in cols if c in ff5_slice.columns]
+                if len(available_cols) < len(cols):
+                    regime_results[regime_name][model_name] = None
+                    continue
+                block = run_multi_portfolio_regression(port_slice, rf_slice, ff5_slice[available_cols])
+                regime_results[regime_name][model_name] = block
+
+        # ── Regime context cards ────────────────────────────────────────────
+        st.markdown('<div class="sec-label"><span class="dot"></span> Regime Context</div>', unsafe_allow_html=True)
+        rcols = st.columns(3)
+        for rcol, (regime_name, blurb) in zip(rcols, REGIME_BLURBS.items()):
+            with rcol:
+                st.markdown(f"""
+                <div class="panel" style="min-height:180px;">
+                <div class="panel-title">{regime_name}</div>
+                <p style="color:var(--text2); font-size:0.78rem; line-height:1.5;">{blurb}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # ── Adjusted R² / A|alpha| / GRS summary table ─────────────────────
+        st.markdown('<div class="sec-label"><span class="dot"></span> Adjusted R² · Average |Alpha| · GRS F-Test</div>',
+                    unsafe_allow_html=True)
+
+        summary_html = ('<div class="panel"><table><thead><tr>'
+                         '<th>Regime</th><th>Model</th><th>Adj. R²</th>'
+                         '<th>A|αᵢ| (%)</th><th>GRS F-stat</th><th>GRS p-value</th>'
+                         '<th>Reject H₀ (5%)</th></tr></thead><tbody>')
+        adj_r2_rows = []
+        for regime_name in REGIME_WINDOWS:
+            short_regime = regime_name.split(":")[0].strip()
+            row = {'Regime': short_regime}
+            for model_name in model_specs:
+                block = regime_results[regime_name][model_name]
+                if block is None:
+                    summary_html += (f'<tr><td>{short_regime}</td><td>{model_name}</td>'
+                                      f'<td colspan="5" class="metric-warn">Insufficient data</td></tr>')
+                    row[model_name] = np.nan
+                    continue
+                sig = block['GRS_p'] < 0.05 if not np.isnan(block['GRS_p']) else False
+                sig_txt = '<span class="metric-warn">Yes</span>' if sig else '<span class="metric-highlight">No</span>'
+                summary_html += (f'<tr><td>{short_regime}</td><td><strong>{model_name}</strong></td>'
+                                  f'<td class="metric-highlight">{block["mean_adj_r2"]:.4f}</td>'
+                                  f'<td>{block["avg_abs_alpha"]*100:.3f}</td>'
+                                  f'<td>{block["GRS"]:.3f}</td>'
+                                  f'<td>{block["GRS_p"]:.4f}</td>'
+                                  f'<td>{sig_txt}</td></tr>')
+                row[model_name] = block['mean_adj_r2']
+            adj_r2_rows.append(row)
+        summary_html += '</tbody></table></div>'
+        st.markdown(summary_html, unsafe_allow_html=True)
+
+        # ── Adjusted R² bar chart across regimes ────────────────────────────
+        st.markdown('<div class="sec-label"><span class="dot"></span> Adjusted R² by Regime</div>', unsafe_allow_html=True)
+        adj_r2_df = pd.DataFrame(adj_r2_rows).set_index('Regime')
+        st.bar_chart(adj_r2_df)
+
+        # ── Alpha heatmap (5x5) for a selected model/regime ─────────────────
+        st.markdown('<div class="sec-label"><span class="dot"></span> Alpha Heatmap (5×5 Size/B-M Grid)</div>',
+                    unsafe_allow_html=True)
+        hcol1, hcol2 = st.columns(2)
+        with hcol1:
+            heatmap_regime = st.selectbox("Regime", list(REGIME_WINDOWS.keys()), key="heatmap_regime")
+        with hcol2:
+            heatmap_model = st.selectbox("Model", list(model_specs.keys()), key="heatmap_model")
+
+        hblock = regime_results[heatmap_regime][heatmap_model]
+        if hblock is None:
+            st.info("No result available for this regime/model combination (insufficient overlapping data).")
+        elif hblock['N'] != 25:
+            st.info(f"Heatmap needs exactly 25 portfolios to form a 5×5 grid — found {hblock['N']}. "
+                    "Table view of all portfolio alphas is shown instead.")
+            alpha_table = pd.DataFrame({
+                'Portfolio': hblock['columns'],
+                'Alpha (%)': hblock['alphas'] * 100,
+                't-stat': hblock['t'],
+            })
+            st.dataframe(alpha_table, use_container_width=True)
+        else:
+            alphas_grid = (hblock['alphas'] * 100).reshape(5, 5)
+            t_grid = hblock['t'].reshape(5, 5)
+            max_abs = max(np.abs(alphas_grid).max(), 1e-6)
+            grid_html = '<div class="panel"><div class="panel-title">// Alpha (%) by Size (rows) × B/M (cols), grid follows your file\'s column order</div>'
+            grid_html += '<table><tbody>'
+            for r in range(5):
+                grid_html += '<tr>'
+                for c in range(5):
+                    a = alphas_grid[r, c]
+                    t = t_grid[r, c]
+                    intensity = min(abs(a) / max_abs, 1.0)
+                    color = f'rgba(255,107,107,{0.10 + 0.35*intensity})' if abs(t) > 1.96 else f'rgba(79,255,176,{0.08 + 0.25*intensity})'
+                    grid_html += (f'<td style="background:{color}; text-align:center; padding:0.8rem;">'
+                                  f'<div style="font-weight:600;">{a:+.2f}%</div>'
+                                  f'<div style="font-size:0.65rem; color:var(--text2);">t={t:.2f}</div></td>')
+                grid_html += '</tr>'
+            grid_html += '</tbody></table></div>'
+            st.markdown(grid_html, unsafe_allow_html=True)
+            st.markdown('<p style="color:var(--muted); font-size:0.7rem;">Red = |t-stat| > 1.96 (individually significant alpha). Darker shade = larger magnitude.</p>',
+                        unsafe_allow_html=True)
+
+        # ── Rolling 36-month market beta (equal-weighted across all portfolios) ──
+        st.markdown('<div class="sec-label"><span class="dot"></span> Rolling 36-Month Market Beta (Equal-Weighted Portfolio Average)</div>',
+                    unsafe_allow_html=True)
+        try:
+            avg_port = portfolio_df.mean(axis=1)
+            combined = pd.concat([avg_port.rename('avg_port'), rf_full.rename('rf'), ff3['Mkt-RF'].rename('mkt')],
+                                  axis=1, join='inner').dropna()
+            window = 36
+            if len(combined) >= window + 1:
+                excess = (combined['avg_port'] - combined['rf']).values
+                mkt_vals = combined['mkt'].values
+                betas, dates = [], []
+                for i in range(window, len(combined) + 1):
+                    y = excess[i - window:i]
+                    x = mkt_vals[i - window:i]
+                    Xw = np.column_stack([np.ones(window), x])
+                    b = np.linalg.lstsq(Xw, y, rcond=None)[0]
+                    betas.append(b[1])
+                    dates.append(combined.index[i - 1])
+                rolling_df = pd.DataFrame({'Market Beta (36m rolling)': betas}, index=dates)
+                st.line_chart(rolling_df)
+            else:
+                st.info(f"Need at least {window + 1} overlapping months to compute a rolling beta "
+                        f"(have {len(combined)}).")
+        except Exception as roll_e:
+            st.info(f"Rolling beta chart unavailable: {roll_e}")
+
+except Exception as e:
+    st.error(f"25-Portfolio Analysis Error: {e}")
+    with st.expander("Debug Info (25-Portfolio Section)"):
         import traceback
         st.code(traceback.format_exc())
