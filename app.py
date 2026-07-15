@@ -2635,12 +2635,13 @@ REGIME_BLURBS = {
     "Post-Crisis Recovery & Quantitative Easing (2013-2019)": (
         "Follows Draghi's 2012 'whatever it takes' structural break: negative ECB rates from "
         "2014 and full quantitative easing from 2015 produced a calmer, policy-supported market. "
-        "Loadings and fit are expected to look structurally different from Regime 1."
+        "Loadings and fit are expected to look structurally different from the Sovereign Debt "
+        "Crisis condition."
     ),
     "COVID Shock & Post-Pandemic Inflation Cycle (2020-2024)": (
         "Spans the COVID shock and the ECB's shift from emergency pandemic-era asset purchases "
         "to an aggressive rate-hiking cycle from 2022 - a higher-rate, higher-volatility "
-        "environment than Regime 2."
+        "environment than the Recovery & QE condition."
     ),
 }
 
