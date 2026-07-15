@@ -21,6 +21,8 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
+    html { font-size: 19px; }
+
     :root {
         --bg:        #ffffff;
         --surface:   #fafbfa;
@@ -132,6 +134,17 @@ st.markdown("""
     [data-testid="stSidebar"] hr {
         border-color: var(--border) !important;
         margin: 0.8rem 0 !important;
+    }
+
+    /* The selectbox control itself has a dark background by default in this
+       Streamlit theme; force its text white so the selected value is readable
+       (this is more specific than the general sidebar text rule above, so it
+       correctly overrides it just for this control). */
+    [data-testid="stSidebar"] [data-baseweb="select"] > div {
+        background: #1a1a1a !important;
+    }
+    [data-testid="stSidebar"] [data-baseweb="select"] * {
+        color: #ffffff !important;
     }
 
     .header-block {
@@ -2584,26 +2597,26 @@ if portfolios_beme is None or portfolios_op is None or portfolios_inv is None:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 REGIME_WINDOWS = {
-    "Regime 1: Sovereign Debt Crisis (2010-2012)": (datetime(2010, 1, 1), datetime(2012, 12, 31)),
-    "Regime 2: QE / Recovery Era (2013-2019)": (datetime(2013, 1, 1), datetime(2019, 12, 31)),
-    "Regime 3: COVID & Rate-Hike Cycle (2020-2024)": (datetime(2020, 1, 1), datetime(2024, 12, 31)),
+    "European Sovereign Debt Crisis (2010-2012)": (datetime(2010, 1, 1), datetime(2012, 12, 31)),
+    "Post-Crisis Recovery & Quantitative Easing (2013-2019)": (datetime(2013, 1, 1), datetime(2019, 12, 31)),
+    "COVID Shock & Post-Pandemic Inflation Cycle (2020-2024)": (datetime(2020, 1, 1), datetime(2024, 12, 31)),
 }
 
 REGIME_BLURBS = {
-    "Regime 1: Sovereign Debt Crisis (2010-2012)": (
+    "European Sovereign Debt Crisis (2010-2012)": (
         "Dominated by widening Greek, Italian, and Spanish sovereign spreads, repeated ECB "
-        "liquidity interventions, and cross-country contagion risk. Only 36 monthly "
+        "emergency liquidity interventions, and cross-country contagion risk. Only 36 monthly "
         "observations - expect noisier, lower-fit estimates across all three models."
     ),
-    "Regime 2: QE / Recovery Era (2013-2019)": (
-        "Post-'whatever it takes' structural break: negative ECB rates from 2014 and full "
-        "quantitative easing from 2015 produced a calmer, policy-supported market. Loadings "
-        "and fit are expected to look structurally different from Regime 1."
+    "Post-Crisis Recovery & Quantitative Easing (2013-2019)": (
+        "Follows Draghi's 2012 'whatever it takes' structural break: negative ECB rates from "
+        "2014 and full quantitative easing from 2015 produced a calmer, policy-supported market. "
+        "Loadings and fit are expected to look structurally different from Regime 1."
     ),
-    "Regime 3: COVID & Rate-Hike Cycle (2020-2024)": (
-        "Spans the COVID shock and the subsequent 2022+ ECB rate-hiking cycle - a higher-rate, "
-        "higher-volatility environment than Regime 2, and a different kind of stress than "
-        "Regime 1's sovereign-contagion shock."
+    "COVID Shock & Post-Pandemic Inflation Cycle (2020-2024)": (
+        "Spans the COVID shock and the ECB's shift from emergency pandemic-era asset purchases "
+        "to an aggressive rate-hiking cycle from 2022 - a higher-rate, higher-volatility "
+        "environment than Regime 2."
     ),
 }
 
@@ -2813,7 +2826,7 @@ def run_multi_portfolio_regression(portfolio_returns, rf, factor_matrix):
 
 with st.sidebar:
     st.markdown("### Configuration")
-    st.markdown("**Regime**")
+    st.markdown("**Macroeconomic Condition**")
     selected_period = st.selectbox("", list(MACRO_PERIODS.keys()), label_visibility="collapsed")
     period_start, period_end = MACRO_PERIODS[selected_period]
     st.divider()
@@ -2957,22 +2970,6 @@ try:
         st.markdown(f"### Best Performer\n**{best_model}** dominates with R² = {best_r2:.4f}\n\n- Explains {best_r2*100:.1f}% of return variation\n- {'Alpha is statistically significant' if alpha_sig[best_model] else 'Alpha is not statistically significant'}\n- **Recommendation:** Use {best_model} for this period")
     with col2:
         st.markdown(f"### Factor Effectiveness\n- **FF3 → CAPM:** +{improvement_3_to_capm:.1f}% improvement\n- **FF5 → FF3:** {improvement_5_to_3:+.1f}% change\n\n{f'SMB/HML factors substantially improve explanatory power' if improvement_3_to_capm > 5 else 'SMB/HML offer modest marginal benefit'}\n\n{f'RMW/CMA factors add value' if improvement_5_to_3 > 0 else 'RMW/CMA provide diminishing returns'}")
-    
-    # ─── EXPORT ──────────────────────────────────────────────────────────────
-    st.markdown('<div class="sec-label"><span class="dot"></span> Export Results</div>', unsafe_allow_html=True)
-    export_data = {
-        'Model': ['CAPM', 'FF3', 'FF5'],
-        'R_Squared': [capm_res['r_squared'], ff3_res['r_squared'], ff5_res['r_squared']],
-        'Alpha_%': [capm_res['alpha']*100, ff3_res['alpha']*100, ff5_res['alpha']*100],
-        'Alpha_t_stat': [capm_res['alpha_t'], ff3_res['alpha_t'], ff5_res['alpha_t']],
-        'Alpha_p_value': [capm_res['alpha_p'], ff3_res['alpha_p'], ff5_res['alpha_p']],
-        'Observations': [capm_res['n_obs'], ff3_res['n_obs'], ff5_res['n_obs']],
-        'Period': [selected_period] * 3,
-        'Asset': [returns_display] * 3
-    }
-    export_df = pd.DataFrame(export_data)
-    csv = export_df.to_csv(index=False)
-    st.download_button("Download Results (CSV)", csv.encode(), "factor_model_comparison.csv", "text/csv")
 
 except Exception as e:
     st.error(f"Analysis Error: {e}")
@@ -3026,53 +3023,54 @@ try:
                 block = run_multi_portfolio_regression(port_slice, rf_slice, ff5_slice[available_cols])
                 regime_results[regime_name][model_name] = block
 
-        # ── Regime context cards ────────────────────────────────────────────
-        st.markdown('<div class="sec-label"><span class="dot"></span> Regime Context</div>', unsafe_allow_html=True)
+        # ── Macroeconomic condition context cards ───────────────────────────
+        st.markdown('<div class="sec-label"><span class="dot"></span> Macroeconomic Condition Context</div>', unsafe_allow_html=True)
         rcols = st.columns(3)
         for rcol, (regime_name, blurb) in zip(rcols, REGIME_BLURBS.items()):
             with rcol:
+                highlight_style = 'border-color: var(--accent);' if regime_name == selected_period else ''
                 st.markdown(f"""
-                <div class="panel" style="min-height:180px;">
+                <div class="panel" style="min-height:180px; {highlight_style}">
                 <div class="panel-title">{regime_name}</div>
                 <p style="color:var(--text2); font-size:0.78rem; line-height:1.5;">{blurb}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
-        # ── Adjusted R² / A|alpha| / GRS summary table ─────────────────────
+        # ── Adjusted R² / A|alpha| / GRS summary table - selected condition only ──
         st.markdown('<div class="sec-label"><span class="dot"></span> Adjusted R² · Average |Alpha| · GRS F-Test</div>',
                     unsafe_allow_html=True)
+        st.markdown(f'<p style="color:var(--text2); font-size:0.78rem;">Condition: <strong>{selected_period}</strong></p>',
+                    unsafe_allow_html=True)
 
+        short_condition = selected_period.split(" (")[0].strip()
         summary_html = ('<div class="panel"><table><thead><tr>'
-                         '<th>Regime</th><th>Model</th><th>Adj. R²</th>'
+                         '<th>Condition</th><th>Model</th><th>Adj. R²</th>'
                          '<th>A|αᵢ| (%)</th><th>GRS F-stat</th><th>GRS p-value</th>'
                          '<th>Reject H₀ (5%)</th></tr></thead><tbody>')
-        adj_r2_rows = []
-        for regime_name in REGIME_WINDOWS:
-            short_regime = regime_name.split(":")[0].strip()
-            row = {'Regime': short_regime}
-            for model_name in model_specs:
-                block = regime_results[regime_name][model_name]
-                if block is None:
-                    summary_html += (f'<tr><td>{short_regime}</td><td>{model_name}</td>'
-                                      f'<td colspan="5" class="metric-warn">Insufficient data</td></tr>')
-                    row[model_name] = np.nan
-                    continue
-                sig = block['GRS_p'] < 0.05 if not np.isnan(block['GRS_p']) else False
-                sig_txt = '<span class="metric-warn">Yes</span>' if sig else '<span class="metric-highlight">No</span>'
-                summary_html += (f'<tr><td>{short_regime}</td><td><strong>{model_name}</strong></td>'
-                                  f'<td class="metric-highlight">{block["mean_adj_r2"]:.4f}</td>'
-                                  f'<td>{block["avg_abs_alpha"]*100:.3f}</td>'
-                                  f'<td>{block["GRS"]:.3f}</td>'
-                                  f'<td>{block["GRS_p"]:.4f}</td>'
-                                  f'<td>{sig_txt}</td></tr>')
-                row[model_name] = block['mean_adj_r2']
-            adj_r2_rows.append(row)
+        clustered_rows = {}
+        for model_name in model_specs:
+            block = regime_results[selected_period][model_name]
+            if block is None:
+                summary_html += (f'<tr><td>{short_condition}</td><td>{model_name}</td>'
+                                  f'<td colspan="5" class="metric-warn">Insufficient data</td></tr>')
+                clustered_rows[model_name] = np.nan
+                continue
+            sig = block['GRS_p'] < 0.05 if not np.isnan(block['GRS_p']) else False
+            sig_txt = '<span class="metric-warn">Yes</span>' if sig else '<span class="metric-highlight">No</span>'
+            summary_html += (f'<tr><td>{short_condition}</td><td><strong>{model_name}</strong></td>'
+                              f'<td class="metric-highlight">{block["mean_adj_r2"]:.4f}</td>'
+                              f'<td>{block["avg_abs_alpha"]*100:.3f}</td>'
+                              f'<td>{block["GRS"]:.3f}</td>'
+                              f'<td>{block["GRS_p"]:.4f}</td>'
+                              f'<td>{sig_txt}</td></tr>')
+            clustered_rows[model_name] = block['mean_adj_r2']
         summary_html += '</tbody></table></div>'
         st.markdown(summary_html, unsafe_allow_html=True)
 
-        # ── Adjusted R² bar chart across regimes ────────────────────────────
-        st.markdown('<div class="sec-label"><span class="dot"></span> Adjusted R² by Regime</div>', unsafe_allow_html=True)
-        adj_r2_df = pd.DataFrame(adj_r2_rows).set_index('Regime')
+        # ── Clustered bar chart: CAPM vs FF3 vs FF5, selected condition only ──
+        st.markdown('<div class="sec-label"><span class="dot"></span> Adjusted R² - Model Comparison (Selected Condition)</div>',
+                    unsafe_allow_html=True)
+        adj_r2_df = pd.DataFrame([clustered_rows], index=[short_condition])
         st.bar_chart(adj_r2_df)
 
         # ── Alpha heatmap (5x5): CAPM / FF3 / FF5 shown side by side for the ──
@@ -3160,5 +3158,38 @@ try:
 except Exception as e:
     st.error(f"25-Portfolio Analysis Error: {e}")
     with st.expander("Debug Info (25-Portfolio Section)"):
+        import traceback
+        st.code(traceback.format_exc())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EXPORT RESULTS - moved to the very bottom of the app, isolated in its own
+# try/except so it can never break either section above it.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+try:
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="sec-label"><span class="dot"></span> Export Results</div>', unsafe_allow_html=True)
+
+    if 'capm_res' in globals() and 'ff3_res' in globals() and 'ff5_res' in globals():
+        export_data = {
+            'Model': ['CAPM', 'FF3', 'FF5'],
+            'R_Squared': [capm_res['r_squared'], ff3_res['r_squared'], ff5_res['r_squared']],
+            'Alpha_%': [capm_res['alpha']*100, ff3_res['alpha']*100, ff5_res['alpha']*100],
+            'Alpha_t_stat': [capm_res['alpha_t'], ff3_res['alpha_t'], ff5_res['alpha_t']],
+            'Alpha_p_value': [capm_res['alpha_p'], ff3_res['alpha_p'], ff5_res['alpha_p']],
+            'Observations': [capm_res['n_obs'], ff3_res['n_obs'], ff5_res['n_obs']],
+            'Condition': [selected_period] * 3,
+            'Asset': [returns_display] * 3
+        }
+        export_df = pd.DataFrame(export_data)
+        csv = export_df.to_csv(index=False)
+        st.download_button("Download Results (CSV)", csv.encode(), "factor_model_comparison.csv", "text/csv")
+    else:
+        st.info("Run the single-asset comparison above successfully to enable export.")
+
+except Exception as e:
+    st.error(f"Export Error: {e}")
+    with st.expander("Debug Info (Export Section)"):
         import traceback
         st.code(traceback.format_exc())
