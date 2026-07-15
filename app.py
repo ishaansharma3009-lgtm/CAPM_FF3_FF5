@@ -103,16 +103,6 @@ st.markdown("""
     [data-testid="stSidebarCollapseButton"] { display: none !important; }
 
     [data-testid="stSidebar"] * { color: var(--text) !important; }
-    
-    [data-testid="stSidebar"] .stSelectbox select,
-    [data-testid="stSidebar"] .stMultiSelect select,
-    [data-testid="stSidebar"] .stTextInput input,
-    [data-testid="stSidebar"] .stDateInput input {
-        background: var(--surface2) !important;
-        border: 1px solid var(--border2) !important;
-        color: var(--text) !important;
-        border-radius: 4px !important;
-    }
 
     [data-testid="stSidebar"] label,
     [data-testid="stSidebar"] .stMarkdown p {
@@ -136,16 +126,50 @@ st.markdown("""
         margin: 0.8rem 0 !important;
     }
 
-    /* The selectbox control itself has a dark background by default in this
-       Streamlit theme; force its text white so the selected value is readable
-       (this is more specific than the general sidebar text rule above, so it
-       correctly overrides it just for this control). */
-    [data-testid="stSidebar"] [data-baseweb="select"] > div {
-        background: #1a1a1a !important;
+    /* All interactive widgets - selectbox, number input, text input/area,
+       buttons - light background with dark text, in both the sidebar and
+       the main content area. These are BaseWeb components whose default
+       styling is otherwise dark and won't automatically pick up this app's
+       light theme, which is what was causing solid black boxes. */
+    [data-testid="stSidebar"] input,
+    [data-testid="stSidebar"] textarea,
+    [data-testid="stSidebar"] select,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] [data-baseweb="base-input"],
+    [data-testid="stAppViewContainer"] input,
+    [data-testid="stAppViewContainer"] textarea,
+    [data-testid="stAppViewContainer"] select,
+    [data-testid="stAppViewContainer"] [data-baseweb="select"] > div,
+    [data-testid="stAppViewContainer"] [data-baseweb="base-input"] {
+        background: var(--surface2) !important;
+        border: 1px solid var(--border2) !important;
+        color: var(--text) !important;
+        border-radius: 4px !important;
     }
-    [data-testid="stSidebar"] [data-baseweb="select"] * {
+
+    [data-testid="stSidebar"] [data-baseweb="select"] *,
+    [data-testid="stSidebar"] [data-baseweb="base-input"] *,
+    [data-testid="stAppViewContainer"] [data-baseweb="select"] *,
+    [data-testid="stAppViewContainer"] [data-baseweb="base-input"] * {
+        color: var(--text) !important;
+    }
+
+    button,
+    [data-testid="stDownloadButton"] button,
+    [data-testid="baseButton-secondary"],
+    [data-testid="baseButton-primary"] {
+        background: var(--surface2) !important;
+        color: var(--text) !important;
+        border: 1px solid var(--border2) !important;
+        border-radius: 4px !important;
+    }
+    button:hover,
+    [data-testid="stDownloadButton"] button:hover {
+        background: var(--accent) !important;
         color: #ffffff !important;
+        border-color: var(--accent) !important;
     }
+    button *, [data-testid="stDownloadButton"] button * { color: inherit !important; }
 
     .header-block {
         display: flex;
@@ -3070,7 +3094,12 @@ try:
         # ── Clustered bar chart: CAPM vs FF3 vs FF5, selected condition only ──
         st.markdown('<div class="sec-label"><span class="dot"></span> Adjusted R² - Model Comparison (Selected Condition)</div>',
                     unsafe_allow_html=True)
-        adj_r2_df = pd.DataFrame([clustered_rows], index=[short_condition])
+        adj_r2_df = pd.DataFrame(
+            {'Adjusted R²': [clustered_rows.get('CAPM', np.nan),
+                              clustered_rows.get('FF3', np.nan),
+                              clustered_rows.get('FF5', np.nan)]},
+            index=['CAPM', 'FF3', 'FF5']
+        )
         st.bar_chart(adj_r2_df)
 
         # ── Alpha heatmap (5x5): CAPM / FF3 / FF5 shown side by side for the ──
