@@ -3089,6 +3089,34 @@ try:
         summary_html += '</tbody></table></div>'
         st.markdown(summary_html, unsafe_allow_html=True)
 
+        # ── CSV export for this table (selected condition + portfolio set) ──
+        grs_export_rows = []
+        for model_name in model_specs:
+            block = regime_results[selected_period][model_name]
+            if block is None:
+                grs_export_rows.append({
+                    'Condition': selected_period, 'Portfolio_Set': portfolio_set_choice,
+                    'Model': model_name, 'Adj_R2': np.nan, 'Avg_Abs_Alpha_pct': np.nan,
+                    'GRS_Fstat': np.nan, 'GRS_pvalue': np.nan, 'Reject_H0_5pct': np.nan,
+                    'N_Portfolios': np.nan, 'T_Obs': np.nan, 'K_Factors': np.nan,
+                })
+                continue
+            sig = bool(block['GRS_p'] < 0.05) if not np.isnan(block['GRS_p']) else False
+            grs_export_rows.append({
+                'Condition': selected_period, 'Portfolio_Set': portfolio_set_choice,
+                'Model': model_name, 'Adj_R2': block['mean_adj_r2'],
+                'Avg_Abs_Alpha_pct': block['avg_abs_alpha'] * 100,
+                'GRS_Fstat': block['GRS'], 'GRS_pvalue': block['GRS_p'],
+                'Reject_H0_5pct': sig, 'N_Portfolios': block['N'],
+                'T_Obs': block['T'], 'K_Factors': block['K'],
+            })
+        grs_export_df = pd.DataFrame(grs_export_rows)
+        grs_csv = grs_export_df.to_csv(index=False)
+        st.download_button(
+            "Download GRS Summary (CSV)", grs_csv.encode(),
+            "grs_summary.csv", "text/csv", key="grs_summary_download"
+        )
+
         # ── Clustered bar chart: CAPM vs FF3 vs FF5, selected condition only ──
         st.markdown('<div class="sec-label"><span class="dot"></span> Adjusted R² - Model Comparison (Selected Condition)</div>',
                     unsafe_allow_html=True)
@@ -3154,6 +3182,28 @@ try:
         st.markdown('<p style="color:var(--muted); font-size:0.7rem;">Red = |t-stat| > 1.96 (individually '
                     'significant alpha). Darker shade = larger magnitude. Grid follows your file\'s column order '
                     '(Size rows × B/M columns).</p>', unsafe_allow_html=True)
+
+        # ── Per-portfolio (all 25) alpha/t-stat export - the detail behind the heatmap ──
+        portfolio_export_rows = []
+        for model_name in model_specs:
+            block = regime_results[selected_period][model_name]
+            if block is None:
+                continue
+            for col, a, t, p, r2, adj_r2 in zip(
+                block['columns'], block['alphas'], block['t'], block['p'], block['r2'], block['adj_r2']
+            ):
+                portfolio_export_rows.append({
+                    'Condition': selected_period, 'Portfolio_Set': portfolio_set_choice,
+                    'Model': model_name, 'Portfolio': col, 'Alpha_pct': a * 100,
+                    't_stat': t, 'p_value': p, 'R2': r2, 'Adj_R2': adj_r2,
+                })
+        if portfolio_export_rows:
+            portfolio_export_df = pd.DataFrame(portfolio_export_rows)
+            portfolio_csv = portfolio_export_df.to_csv(index=False)
+            st.download_button(
+                "Download Per-Portfolio Alphas (CSV)", portfolio_csv.encode(),
+                "portfolio_alphas.csv", "text/csv", key="portfolio_alphas_download"
+            )
 
         # ── Rolling 36-month market beta (equal-weighted across all portfolios) ──
         st.markdown('<div class="sec-label"><span class="dot"></span> Rolling 36-Month Market Beta (Equal-Weighted Portfolio Average)</div>',
