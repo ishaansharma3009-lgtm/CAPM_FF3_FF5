@@ -2854,9 +2854,6 @@ with st.sidebar:
     st.markdown("**Macroeconomic Condition**")
     selected_period = st.selectbox("", list(MACRO_PERIODS.keys()), label_visibility="collapsed")
     period_start, period_end = MACRO_PERIODS[selected_period]
-    st.divider()
-    st.markdown("**Advanced**")
-    risk_free_override = st.number_input("Risk-Free Rate (% annual)", 0.0, 10.0, 2.5, 0.1) / 100
 
     st.divider()
     st.markdown("### 25-Portfolio GRS Test")
